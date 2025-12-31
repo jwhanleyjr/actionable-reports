@@ -159,7 +159,7 @@ export async function findConstituentIdByAccountNumber(accountNumber: string): P
   url: string;
 }> {
   const normalizedBase = getBaseUrl().endsWith('/') ? getBaseUrl() : `${getBaseUrl()}/`;
-  const url = new URL('constituent/search', normalizedBase);
+  const url = new URL('constituents/search', normalizedBase);
   url.searchParams.set('skip', '0');
   url.searchParams.set('take', '1');
   url.searchParams.set('search', accountNumber);
