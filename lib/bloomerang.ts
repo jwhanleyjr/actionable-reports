@@ -53,7 +53,9 @@ function getBaseUrl(): string {
 }
 
 async function request<T>(path: string, options: RequestInit = {}, retries = 3): Promise<T> {
-  const url = new URL(path, getBaseUrl()).toString();
+  const normalizedBase = getBaseUrl().endsWith('/') ? getBaseUrl() : `${getBaseUrl()}/`;
+  const normalizedPath = path.startsWith('/') ? path.slice(1) : path;
+  const url = new URL(normalizedPath, normalizedBase).toString();
   const headers = new Headers(options.headers);
   headers.set('X-API-KEY', getApiKey());
   headers.set('Accept', 'application/json');
