@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 
-import { getConstituent, getHousehold } from '@/lib/bloomerang';
+import { BloomerangRequestError, getConstituent, getHousehold } from '@/lib/bloomerang';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 
 export const dynamic = 'force-dynamic';
@@ -67,8 +67,9 @@ export async function POST(_request: Request, { params }: Params) {
     }
   } catch (error) {
     console.error('Enhancement failed', error);
+    const url = error instanceof BloomerangRequestError ? error.url : undefined;
     return NextResponse.json(
-      { error: 'Failed to enhance campaign constituent data' },
+      { error: 'Failed to enhance campaign constituent data', url },
       { status: 502 }
     );
   }

@@ -1,7 +1,22 @@
 import 'server-only';
 
-const BASE_URL = 'https://api.bloomerang.co';
+class BloomerangRequestError extends Error {
+  url: string;
+  status: number;
+  bodySnippet?: string;
+  contentType?: string | null;
+
+  constructor(message: string, url: string, status: number, bodySnippet?: string, contentType?: string | null) {
+    super(message);
+    this.url = url;
+    this.status = status;
+    this.bodySnippet = bodySnippet;
+    this.contentType = contentType;
+  }
+}
+
 let apiKey: string | null = null;
+let baseUrl: string | null = null;
 
 async function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -22,8 +37,23 @@ function getApiKey(): string {
   return apiKey;
 }
 
+function getBaseUrl(): string {
+  if (baseUrl) {
+    return baseUrl;
+  }
+
+  const envBaseUrl = process.env.BLOOMERANG_BASE_URL;
+
+  if (!envBaseUrl) {
+    throw new Error('BLOOMERANG_BASE_URL is not set');
+  }
+
+  baseUrl = envBaseUrl;
+  return baseUrl;
+}
+
 async function request<T>(path: string, options: RequestInit = {}, retries = 3): Promise<T> {
-  const url = `${BASE_URL}${path}`;
+  const url = new URL(path, getBaseUrl()).toString();
   const headers = new Headers(options.headers);
   headers.set('X-API-KEY', getApiKey());
   headers.set('Accept', 'application/json');
@@ -39,8 +69,21 @@ async function request<T>(path: string, options: RequestInit = {}, retries = 3):
         await sleep(getBackoffDelay(retries));
         return request<T>(path, options, retries - 1);
       }
+      const contentType = response.headers.get('content-type');
       const body = await safeReadError(response);
-      throw new Error(`Bloomerang request failed (${response.status}): ${body}`);
+      const snippet = body.slice(0, 300);
+      console.error('Bloomerang request failed', {
+        url,
+        status: response.status,
+        contentType,
+      });
+      throw new BloomerangRequestError(
+        `Bloomerang request failed (${response.status}) for ${url}: ${snippet}`,
+        url,
+        response.status,
+        snippet,
+        contentType,
+      );
     }
 
     return (await response.json()) as T;
@@ -81,3 +124,5 @@ export async function getConstituent(accountId: number) {
 export async function getHousehold(householdId: number) {
   return request(`/v2/households/${householdId}`);
 }
+
+export { BloomerangRequestError };
