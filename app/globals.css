@@ -1,27 +1,6 @@
 :root {
-  --max-width: 1100px;
-  --border-radius: 12px;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
     "Liberation Mono", "Courier New", monospace;
-  --foreground-rgb: 0, 0, 0;
-  --background-start-rgb: 214, 219, 220;
-  --background-end-rgb: 255, 255, 255;
-  --callout-rgb: 238, 240, 241;
-  --card-rgb: 255, 255, 255;
-  --card-border-rgb: 228, 232, 233;
-  --glow-rgb: 105, 211, 252;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --foreground-rgb: 255, 255, 255;
-    --background-start-rgb: 0, 0, 0;
-    --background-end-rgb: 0, 0, 0;
-    --callout-rgb: 20, 20, 20;
-    --card-rgb: 100, 100, 100;
-    --card-border-rgb: 200, 200, 200;
-    --glow-rgb: 61, 170, 232;
-  }
 }
 
 * {
@@ -34,18 +13,13 @@ html,
 body {
   max-width: 100vw;
   overflow-x: hidden;
+  background: #0b1224;
+  color: #e9edf6;
 }
 
 body {
   font-family: "Inter", "SF Pro Display", "SF Pro Text", -apple-system, BlinkMacSystemFont,
     "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  color: rgb(var(--foreground-rgb));
-  background: linear-gradient(
-      to bottom,
-      transparent,
-      rgb(var(--background-end-rgb))
-    )
-    rgb(var(--background-start-rgb));
 }
 
 a {
