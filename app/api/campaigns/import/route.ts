@@ -155,8 +155,13 @@ export async function POST(request: Request) {
         .insert(accountIds.map((accountId) => ({ campaign_id: campaign.id, account_id: accountId })));
 
       if (rowsError) {
+        console.error('Failed to store imported rows', rowsError);
         return NextResponse.json(
-          { error: 'Failed to store imported rows.' },
+          {
+            error: 'Failed to store imported rows.',
+            details: rowsError.message,
+            hint: rowsError.hint,
+          },
           { status: 500 }
         );
       }
