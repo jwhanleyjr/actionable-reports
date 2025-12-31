@@ -19,7 +19,7 @@ type MemberWithStats = {
   constituentId: number;
   stats?: GivingStats;
   recentTransactions?: Array<{ id: string | number | null; amount: number; date: string | null; type: string | null }>;
-  statsDebug?: { transactionCount: number; includedCount: number; requestUrls: string[] };
+  statsDebug?: { transactionCount: number; includedCount: number; requestUrls: string[]; rawResponses?: unknown[] };
   requestUrls?: string[];
   profileUrl?: string;
   statsError?: string;
@@ -282,6 +282,16 @@ export default function SearchPage() {
                                 <p className={styles.muted}>No recent transactions.</p>
                               )}
                             </div>
+                            {member.statsDebug?.rawResponses?.length ? (
+                              <div className={styles.jsonBlock}>
+                                <p className={styles.jsonTitle}>Transaction API JSON</p>
+                                {member.statsDebug.rawResponses.map((raw, index) => (
+                                  <pre key={`${member.constituentId}-raw-${index}`} className={styles.jsonPre}>
+                                    {safeJsonStringify(raw)}
+                                  </pre>
+                                ))}
+                              </div>
+                            ) : null}
                           </div>
                         ) : (
                           <p className={styles.muted}>
@@ -350,6 +360,14 @@ function formatCurrency(amount: number) {
 function formatDate(value: string) {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString();
+}
+
+function safeJsonStringify(value: unknown) {
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch (error) {
+    return 'Unable to display JSON response.';
+  }
 }
 
 function collectApiUrls(searchUrl?: string, householdUrl?: string, members?: MemberWithStats[]) {

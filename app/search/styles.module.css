@@ -328,6 +328,33 @@
   gap: 6px;
 }
 
+.jsonBlock {
+  margin-top: 16px;
+  border-top: 1px dashed #cbd5e1;
+  padding-top: 14px;
+  display: grid;
+  gap: 10px;
+}
+
+.jsonTitle {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.jsonPre {
+  margin: 0;
+  background: #0f172a;
+  color: #e2e8f0;
+  padding: 12px;
+  border-radius: 10px;
+  font-size: 13px;
+  overflow-x: auto;
+  white-space: pre;
+  font-family: var(--font-mono, "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace);
+}
+
 .urlList {
   list-style: none;
   padding: 0;

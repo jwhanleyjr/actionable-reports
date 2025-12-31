@@ -12,7 +12,12 @@ export type GivingStats = {
   lastGiftDate: string | null;
 };
 
-export type StatsDebug = { transactionCount: number; includedCount: number; requestUrls: string[] };
+export type StatsDebug = {
+  transactionCount: number;
+  includedCount: number;
+  requestUrls: string[];
+  rawResponses: unknown[];
+};
 
 export type StatsResult = {
   ok: true;
@@ -35,6 +40,7 @@ const TAKE = 50;
 export async function calculateGivingStats(constituentId: number, apiKey: string): Promise<StatsResult> {
   const transactions: Transaction[] = [];
   const requestUrls: string[] = [];
+  const rawResponses: unknown[] = [];
   let skip = 0;
 
   while (true) {
@@ -61,6 +67,7 @@ export async function calculateGivingStats(constituentId: number, apiKey: string
     }
 
     const pageResults = normalizeTransactions(response.data);
+    rawResponses.push(response.data);
     transactions.push(...pageResults);
 
     if (pageResults.length < TAKE) {
@@ -77,7 +84,7 @@ export async function calculateGivingStats(constituentId: number, apiKey: string
     constituentId,
     stats: stats.stats,
     recentTransactions: stats.recentTransactions,
-    debug: { ...stats.debug, requestUrls },
+    debug: { ...stats.debug, requestUrls, rawResponses },
   };
 }
 
