@@ -30,6 +30,7 @@ export default function SearchPage() {
   const [members, setMembers] = useState<HouseholdMember[]>([]);
   const [singlePersonHousehold, setSinglePersonHousehold] = useState(false);
   const [constituentName, setConstituentName] = useState<string | null>(null);
+  const [searchedAccountNumber, setSearchedAccountNumber] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -42,12 +43,15 @@ export default function SearchPage() {
     setMembers([]);
     setSinglePersonHousehold(false);
     setConstituentName(null);
+    setSearchedAccountNumber('');
 
     const trimmed = accountNumber.trim();
     if (!trimmed) {
       setError('Please enter an account number to search.');
       return;
     }
+
+    setSearchedAccountNumber(trimmed);
 
     setLoading(true);
     try {
@@ -159,7 +163,20 @@ export default function SearchPage() {
               {loading ? (
                 <p className={styles.muted}>Loading…</p>
               ) : result ? (
-                <pre className={styles.pre}>{JSON.stringify(result, null, 2)}</pre>
+                <ul className={styles.memberList}>
+                  <li className={styles.memberItem}>
+                    <div className={styles.memberName}>Account Number</div>
+                    <div className={styles.memberMeta}>
+                      <span className={styles.metaPill}>{searchedAccountNumber}</span>
+                    </div>
+                  </li>
+                  <li className={styles.memberItem}>
+                    <div className={styles.memberName}>Constituent ID</div>
+                    <div className={styles.memberMeta}>
+                      <span className={styles.metaPill}>{extractConstituentId(result.data) ?? 'Not found'}</span>
+                    </div>
+                  </li>
+                </ul>
               ) : (
                 <p className={styles.muted}>Submit a search to see results here.</p>
               )}
@@ -178,7 +195,9 @@ export default function SearchPage() {
                   <p className={styles.muted}>Single-person household; skipping household lookup.</p>
                 )
               ) : householdResult ? (
-                <pre className={styles.pre}>{JSON.stringify(householdResult, null, 2)}</pre>
+                <p className={styles.muted}>
+                  {extractHouseholdName(householdResult.data) ?? 'No household name found.'}
+                </p>
               ) : (
                 <p className={styles.muted}>Search for a constituent to load household info.</p>
               )}
@@ -241,6 +260,17 @@ function extractHouseholdId(data: unknown): number | null {
   return Number.isFinite(id) ? id : null;
 }
 
+function extractHouseholdName(data: unknown): string | null {
+  const householdName = pickString((data as Record<string, unknown>) ?? {}, [
+    'name',
+    'Name',
+    'householdName',
+    'HouseholdName',
+  ]);
+
+  return householdName ?? null;
+}
+
 function extractIsInHousehold(data: unknown): boolean | null {
   const firstResult = Array.isArray((data as { Results?: unknown[] })?.Results)
     ? (data as { Results: unknown[] }).Results[0]
@@ -284,6 +314,25 @@ function extractConstituentName(data: unknown): string | null {
   ]);
 
   return fallbackId !== null ? `Constituent ${fallbackId}` : null;
+}
+
+function extractConstituentId(data: unknown): number | null {
+  const firstResult = Array.isArray((data as { Results?: unknown[] })?.Results)
+    ? (data as { Results: unknown[] }).Results[0]
+    : null;
+
+  if (!firstResult || typeof firstResult !== 'object') {
+    return null;
+  }
+
+  return pickNumber(firstResult as Record<string, unknown>, [
+    'id',
+    'Id',
+    'constituentId',
+    'ConstituentId',
+    'accountNumber',
+    'AccountNumber',
+  ]);
 }
 
 function extractMembers(data: unknown): HouseholdMember[] {
