@@ -12,11 +12,22 @@ type SearchResult = {
   data?: unknown;
   bodyPreview?: string;
   error?: string;
+  message?: string;
+};
+
+type HouseholdMember = {
+  id: number;
+  name: string;
+  phone?: string;
+  email?: string;
 };
 
 export default function SearchPage() {
   const [accountNumber, setAccountNumber] = useState('');
   const [result, setResult] = useState<SearchResult | null>(null);
+  const [householdResult, setHouseholdResult] = useState<SearchResult | null>(null);
+  const [householdError, setHouseholdError] = useState<string | null>(null);
+  const [members, setMembers] = useState<HouseholdMember[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -24,6 +35,9 @@ export default function SearchPage() {
     event.preventDefault();
     setError(null);
     setResult(null);
+    setHouseholdResult(null);
+    setHouseholdError(null);
+    setMembers([]);
 
     const trimmed = accountNumber.trim();
     if (!trimmed) {
@@ -45,9 +59,36 @@ export default function SearchPage() {
 
       if (!response.ok || !payload.ok) {
         setError(payload.bodyPreview || payload.error || 'Search failed.');
+        return;
       }
 
       setResult(payload);
+
+      const householdId = extractHouseholdId(payload.data);
+
+      if (!householdId) {
+        setHouseholdError('No HouseholdId on this constituent.');
+        return;
+      }
+
+      const householdResponse = await fetch('/api/bloomerang/household', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ householdId }),
+      });
+
+      const householdPayload = (await householdResponse.json()) as SearchResult;
+
+      setHouseholdResult(householdPayload);
+
+      if (!householdResponse.ok || !householdPayload.ok) {
+        setHouseholdError(householdPayload.bodyPreview || householdPayload.error || 'Household lookup failed.');
+        return;
+      }
+
+      setMembers(extractMembers(householdPayload.data));
     } catch (err) {
       console.error('Search request failed', err);
       setError('Unable to complete the search request.');
@@ -99,18 +140,158 @@ export default function SearchPage() {
 
           {error && <div className={styles.error}>{error}</div>}
 
-          <div className={styles.output}>
-            <p className={styles.outputLabel}>Response</p>
-            {loading ? (
-              <p className={styles.muted}>Loading…</p>
-            ) : result ? (
-              <pre className={styles.pre}>{JSON.stringify(result, null, 2)}</pre>
-            ) : (
-              <p className={styles.muted}>Submit a search to see results here.</p>
-            )}
+          <div className={styles.outputStack}>
+            <div className={styles.output}>
+              <p className={styles.outputLabel}>Constituent Search</p>
+              {loading ? (
+                <p className={styles.muted}>Loading…</p>
+              ) : result ? (
+                <pre className={styles.pre}>{JSON.stringify(result, null, 2)}</pre>
+              ) : (
+                <p className={styles.muted}>Submit a search to see results here.</p>
+              )}
+            </div>
+
+            <div className={styles.output}>
+              <p className={styles.outputLabel}>Household</p>
+              {loading ? (
+                <p className={styles.muted}>Loading…</p>
+              ) : householdError ? (
+                <p className={styles.muted}>{householdError}</p>
+              ) : householdResult ? (
+                <pre className={styles.pre}>{JSON.stringify(householdResult, null, 2)}</pre>
+              ) : (
+                <p className={styles.muted}>Search for a constituent to load household info.</p>
+              )}
+            </div>
+
+            <div className={styles.output}>
+              <p className={styles.outputLabel}>Household Members</p>
+              {loading ? (
+                <p className={styles.muted}>Loading…</p>
+              ) : householdError ? (
+                <p className={styles.muted}>{householdError}</p>
+              ) : members.length ? (
+                <ul className={styles.memberList}>
+                  {members.map((member) => (
+                    <li key={member.id} className={styles.memberItem}>
+                      <div className={styles.memberName}>{member.name}</div>
+                      <div className={styles.memberMeta}>
+                        <span className={styles.metaPill}>ID: {member.id}</span>
+                        {member.phone && <span className={styles.metaPill}>Phone: {member.phone}</span>}
+                        {member.email && <span className={styles.metaPill}>Email: {member.email}</span>}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              ) : householdResult ? (
+                <p className={styles.muted}>No household members returned.</p>
+              ) : (
+                <p className={styles.muted}>Search for a constituent to see their household members.</p>
+              )}
+            </div>
           </div>
         </div>
       </div>
     </main>
   );
+}
+
+function extractHouseholdId(data: unknown): number | null {
+  const firstResult = Array.isArray((data as { Results?: unknown[] })?.Results)
+    ? (data as { Results: unknown[] }).Results[0]
+    : null;
+
+  const value = (firstResult as { HouseholdId?: unknown; householdId?: unknown } | null)?.HouseholdId
+    ?? (firstResult as { householdId?: unknown } | null)?.householdId;
+
+  const id = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(id) ? id : null;
+}
+
+function extractMembers(data: unknown): HouseholdMember[] {
+  const members = getMemberArray(data);
+
+  return members
+    .map((member) => {
+      const id = pickNumber(member, ['accountId', 'AccountId', 'constituentId', 'ConstituentId']);
+
+      if (!Number.isFinite(id)) {
+        return null;
+      }
+
+      const name = buildMemberName(member, id as number);
+      const phone = pickString(member, [
+        'PrimaryPhone.Number',
+        'primaryPhone.number',
+        'primaryPhone.Number',
+        'PrimaryPhone.number',
+      ]);
+      const email = pickString(member, [
+        'PrimaryEmail.Value',
+        'primaryEmail.value',
+        'primaryEmail.Value',
+        'PrimaryEmail.value',
+      ]);
+
+      return { id: id as number, name, phone, email };
+    })
+    .filter((member): member is HouseholdMember => Boolean(member));
+}
+
+function getMemberArray(data: unknown): Array<Record<string, unknown>> {
+  const candidate = (data as { members?: unknown; Members?: unknown }) ?? {};
+  const collection = Array.isArray(candidate.members)
+    ? candidate.members
+    : Array.isArray(candidate.Members)
+      ? candidate.Members
+      : [];
+
+  return collection.filter((value): value is Record<string, unknown> => !!value && typeof value === 'object');
+}
+
+function pickNumber(source: Record<string, unknown>, keys: string[]): number | null {
+  for (const key of keys) {
+    const value = readValue(source, key);
+    const numeric = typeof value === 'number' ? value : Number(value);
+    if (Number.isFinite(numeric)) {
+      return numeric;
+    }
+  }
+
+  return null;
+}
+
+function pickString(source: Record<string, unknown>, keys: string[]): string | undefined {
+  for (const key of keys) {
+    const value = readValue(source, key);
+    if (typeof value === 'string' && value.trim()) {
+      return value.trim();
+    }
+  }
+
+  return undefined;
+}
+
+function buildMemberName(member: Record<string, unknown>, fallbackId: number) {
+  const fullName = pickString(member, ['fullName', 'FullName']);
+
+  if (fullName) {
+    return fullName;
+  }
+
+  const first = pickString(member, ['firstName', 'FirstName']) ?? '';
+  const last = pickString(member, ['lastName', 'LastName']) ?? '';
+  const joined = `${first} ${last}`.trim();
+
+  return joined || `Constituent ${fallbackId}`;
+}
+
+function readValue(source: Record<string, unknown>, path: string): unknown {
+  return path.split('.').reduce<unknown>((value, key) => {
+    if (value && typeof value === 'object' && key in (value as Record<string, unknown>)) {
+      return (value as Record<string, unknown>)[key];
+    }
+    return undefined;
+  }, source);
 }

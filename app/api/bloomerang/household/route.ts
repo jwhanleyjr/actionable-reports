@@ -18,7 +18,7 @@ function buildHeaders(mode: HeaderMode, apiKey: string) {
 }
 
 export async function POST(request: NextRequest) {
-  let payload: { accountNumber?: unknown };
+  let payload: { householdId?: unknown };
 
   try {
     payload = await request.json();
@@ -29,14 +29,14 @@ export async function POST(request: NextRequest) {
     }, { status: 400 });
   }
 
-  const accountNumber = typeof payload.accountNumber === 'string'
-    ? payload.accountNumber.trim()
-    : String(payload.accountNumber ?? '').trim();
+  const householdId = typeof payload.householdId === 'number'
+    ? payload.householdId
+    : Number(payload.householdId);
 
-  if (!accountNumber) {
+  if (!Number.isFinite(householdId)) {
     return NextResponse.json({
       ok: false,
-      error: 'accountNumber is required.',
+      error: 'householdId must be a number.',
     }, { status: 400 });
   }
 
@@ -49,10 +49,7 @@ export async function POST(request: NextRequest) {
     }, { status: 500 });
   }
 
-  const url = new URL('https://api.bloomerang.co/v2/constituents/search');
-  url.searchParams.set('skip', '0');
-  url.searchParams.set('take', '10');
-  url.searchParams.set('search', accountNumber);
+  const url = new URL(`https://api.bloomerang.co/v2/households/${householdId}`);
 
   const modes: HeaderMode[] = ['both', 'x-only', 'auth-only'];
 
@@ -65,7 +62,7 @@ export async function POST(request: NextRequest) {
     const contentType = response.headers.get('content-type');
     const bodyText = await response.text();
 
-    console.log('Bloomerang search response', {
+    console.log('Bloomerang household response', {
       url: url.toString(),
       status: response.status,
       contentType,
@@ -77,33 +74,20 @@ export async function POST(request: NextRequest) {
         continue;
       }
 
+      const error = response.status === 404 ? 'Household not found' : undefined;
+
       return NextResponse.json({
         ok: false,
         url: url.toString(),
         status: response.status,
         contentType,
+        error,
         bodyPreview: bodyText.slice(0, 300),
       }, { status: response.status });
     }
 
     try {
       const data = JSON.parse(bodyText);
-
-      const totalFiltered = typeof data?.TotalFiltered === 'number'
-        ? data.TotalFiltered
-        : null;
-      const hasResults = Array.isArray(data?.Results) && data.Results.length > 0;
-
-      if (totalFiltered === 0 || (!hasResults && totalFiltered === null)) {
-        return NextResponse.json({
-          ok: false,
-          url: url.toString(),
-          status: response.status,
-          contentType,
-          error: 'No constituent found',
-          data,
-        }, { status: 404 });
-      }
 
       return NextResponse.json({
         ok: true,
@@ -127,6 +111,6 @@ export async function POST(request: NextRequest) {
   return NextResponse.json({
     ok: false,
     url: url.toString(),
-    error: 'Unable to complete Bloomerang search.',
+    error: 'Unable to complete Bloomerang household lookup.',
   }, { status: 502 });
 }
