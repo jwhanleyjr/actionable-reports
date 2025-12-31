@@ -12,18 +12,21 @@ export type GivingStats = {
   lastGiftDate: string | null;
 };
 
+export type StatsDebug = { transactionCount: number; includedCount: number; requestUrls: string[] };
+
 export type StatsResult = {
   ok: true;
   constituentId: number;
   stats: GivingStats;
   recentTransactions: Array<{ id: string | number | null; amount: number; date: string | null; type: string | null }>;
-  debug: { transactionCount: number; includedCount: number };
+  debug: StatsDebug;
 } | {
   ok: false;
   status?: number;
   url?: string;
   bodyPreview?: string;
   error?: string;
+  requestUrls?: string[];
 };
 
 const INCLUDED_TYPES = new Set(['Donation', 'PledgePayment', 'RecurringDonationPayment']);
@@ -31,6 +34,7 @@ const TAKE = 50;
 
 export async function calculateGivingStats(constituentId: number, apiKey: string): Promise<StatsResult> {
   const transactions: Transaction[] = [];
+  const requestUrls: string[] = [];
   let skip = 0;
 
   while (true) {
@@ -43,6 +47,8 @@ export async function calculateGivingStats(constituentId: number, apiKey: string
 
     const response = await fetchJsonWithModes(url, apiKey);
 
+    requestUrls.push(url.toString());
+
     if (!response.ok) {
       return {
         ok: false,
@@ -50,6 +56,7 @@ export async function calculateGivingStats(constituentId: number, apiKey: string
         url: response.url,
         bodyPreview: response.bodyPreview,
         error: response.error,
+        requestUrls,
       };
     }
 
@@ -70,7 +77,7 @@ export async function calculateGivingStats(constituentId: number, apiKey: string
     constituentId,
     stats: stats.stats,
     recentTransactions: stats.recentTransactions,
-    debug: stats.debug,
+    debug: { ...stats.debug, requestUrls },
   };
 }
 

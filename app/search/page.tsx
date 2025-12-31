@@ -19,6 +19,9 @@ type MemberWithStats = {
   constituentId: number;
   stats?: GivingStats;
   recentTransactions?: Array<{ id: string | number | null; amount: number; date: string | null; type: string | null }>;
+  statsDebug?: { transactionCount: number; includedCount: number; requestUrls: string[] };
+  requestUrls?: string[];
+  profileUrl?: string;
   statsError?: string;
   constituentError?: string;
 };
@@ -41,6 +44,8 @@ type CombinedSearchResult = {
   householdError?: string;
   members?: MemberWithStats[];
   householdTotals?: HouseholdTotals;
+  searchUrl?: string;
+  householdUrl?: string;
   bodyPreview?: string;
   error?: string;
   message?: string;
@@ -96,6 +101,7 @@ export default function SearchPage() {
 
   const members = result?.members ?? [];
   const householdTotals = result?.householdTotals ?? null;
+  const apiUrls = collectApiUrls(result?.searchUrl, result?.householdUrl, members);
 
   return (
     <main className={styles.page}>
@@ -292,6 +298,26 @@ export default function SearchPage() {
                 <p className={styles.muted}>Search for a constituent to see their household members.</p>
               )}
             </div>
+
+            <div className={styles.output}>
+              <p className={styles.outputLabel}>API Call URLs</p>
+              {loading ? (
+                <p className={styles.muted}>Loading…</p>
+              ) : apiUrls.length ? (
+                <ul className={styles.urlList}>
+                  {apiUrls.map((entry) => (
+                    <li key={`${entry.label}-${entry.url}`} className={styles.urlItem}>
+                      <span className={styles.urlLabel}>{entry.label}</span>
+                      <code className={styles.urlValue}>{entry.url}</code>
+                    </li>
+                  ))}
+                </ul>
+              ) : result ? (
+                <p className={styles.muted}>No URLs reported.</p>
+              ) : (
+                <p className={styles.muted}>Search to see the API requests used.</p>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -324,6 +350,32 @@ function formatCurrency(amount: number) {
 function formatDate(value: string) {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString();
+}
+
+function collectApiUrls(searchUrl?: string, householdUrl?: string, members?: MemberWithStats[]) {
+  const urls: Array<{ label: string; url: string }> = [];
+
+  if (searchUrl) {
+    urls.push({ label: 'Search constituent', url: searchUrl });
+  }
+
+  if (householdUrl) {
+    urls.push({ label: 'Household lookup', url: householdUrl });
+  }
+
+  for (const member of members ?? []) {
+    if (member.profileUrl) {
+      urls.push({ label: `Member ${member.constituentId} profile`, url: member.profileUrl });
+    }
+
+    if (member.requestUrls?.length) {
+      member.requestUrls.forEach((url, index) => {
+        urls.push({ label: `Member ${member.constituentId} transactions ${index + 1}`, url });
+      });
+    }
+  }
+
+  return urls;
 }
 
 function extractHouseholdName(data: unknown): string | null {

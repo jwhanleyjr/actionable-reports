@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-import { calculateGivingStats } from '../giving-stats/service';
+import { StatsDebug, calculateGivingStats } from '../giving-stats/service';
 import {
   fetchJsonWithModes,
   getApiKey,
@@ -25,6 +25,9 @@ type MemberWithStats = {
     date: string | null;
     type: string | null;
   }>;
+  statsDebug?: StatsDebug;
+  requestUrls?: string[];
+  profileUrl?: string;
   statsError?: string;
   constituentError?: string;
 };
@@ -85,6 +88,7 @@ export async function POST(request: NextRequest) {
 
   let household: Record<string, unknown> | null = null;
   let householdError: string | undefined;
+  let householdUrl: string | undefined;
   let members: MemberWithStats[] = [];
 
   if (Number.isFinite(householdId) && isInHousehold !== false) {
@@ -92,9 +96,11 @@ export async function POST(request: NextRequest) {
 
     if (householdResult.ok) {
       household = householdResult.household;
+      householdUrl = householdResult.url;
       members = await loadMembersFromHousehold(householdResult.household, apiKey);
     } else {
       householdError = householdResult.error ?? 'Unable to load household data.';
+      householdUrl = householdResult.url;
     }
   }
 
@@ -111,6 +117,8 @@ export async function POST(request: NextRequest) {
     householdError,
     members,
     householdTotals,
+    searchUrl: searchResult.url,
+    householdUrl,
   });
 }
 
@@ -189,6 +197,7 @@ async function getHousehold(householdId: number, apiKey: string) {
 
   return {
     ok: true as const,
+    url: result.url,
     household: result.data as Record<string, unknown>,
   };
 }
@@ -218,16 +227,22 @@ async function loadMembersFromHousehold(household: Record<string, unknown>, apiK
 
 async function buildMemberWithStats(constituentId: number, apiKey: string, existingProfile: Record<string, unknown> | null = null): Promise<MemberWithStats> {
   const profileResult = existingProfile
-    ? { ok: true as const, constituent: existingProfile }
+    ? { ok: true as const, constituent: existingProfile, url: undefined as string | undefined }
     : await fetchConstituent(constituentId, apiKey);
 
   const statsResult = await calculateGivingStats(constituentId, apiKey);
+  const requestUrls = statsResult.ok
+    ? statsResult.debug.requestUrls
+    : statsResult.requestUrls ?? (statsResult.url ? [statsResult.url] : []);
 
   return {
     constituent: profileResult.ok ? profileResult.constituent : null,
     constituentId,
     stats: statsResult.ok ? statsResult.stats : undefined,
     recentTransactions: statsResult.ok ? statsResult.recentTransactions : undefined,
+    statsDebug: statsResult.ok ? statsResult.debug : undefined,
+    requestUrls,
+    profileUrl: profileResult.url,
     statsError: statsResult.ok ? undefined : statsResult.error ?? statsResult.bodyPreview,
     constituentError: profileResult.ok ? undefined : profileResult.error,
   };
@@ -241,12 +256,14 @@ async function fetchConstituent(constituentId: number, apiKey: string) {
     return {
       ok: false as const,
       error: result.error ?? result.bodyPreview ?? 'Unable to load constituent.',
+      url: result.url,
     };
   }
 
   return {
     ok: true as const,
     constituent: (result.data as Record<string, unknown>) ?? null,
+    url: result.url,
   };
 }
 
