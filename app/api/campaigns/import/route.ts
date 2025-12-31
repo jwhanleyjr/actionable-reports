@@ -142,7 +142,22 @@ export async function POST(request: Request) {
       .select('id')
       .single();
 
-    if (campaignError || !campaign) {
+    if (campaignError) {
+      console.error('Failed to create campaign record', campaignError);
+      return NextResponse.json(
+        {
+          error: 'Failed to create campaign record.',
+          message: campaignError.message,
+          code: campaignError.code,
+          details: campaignError.details,
+          hint: campaignError.hint,
+        },
+        { status: 500 }
+      );
+    }
+
+    if (!campaign) {
+      console.error('Failed to create campaign record: campaign missing from response');
       return NextResponse.json(
         { error: 'Failed to create campaign record.' },
         { status: 500 }
@@ -159,7 +174,9 @@ export async function POST(request: Request) {
         return NextResponse.json(
           {
             error: 'Failed to store imported rows.',
-            details: rowsError.message,
+            message: rowsError.message,
+            code: rowsError.code,
+            details: rowsError.details,
             hint: rowsError.hint,
           },
           { status: 500 }
