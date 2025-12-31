@@ -7,9 +7,11 @@ import styles from '../page.module.css';
 
 type ImportResponse = {
   campaignId: number;
-  totalRows: number;
-  validRows: number;
-  skippedRows: number;
+  totalRowsSeen: number;
+  importedCount: number;
+  skippedMissingAccountNumber: number;
+  skippedInvalidAccountNumber: number;
+  warning?: string;
   error?: string;
 };
 
@@ -236,17 +238,23 @@ export default function CampaignDashboard({ initialCampaigns, initialError }: Pr
                   </div>
                   <div>
                     <p className={styles.statLabel}>Rows processed</p>
-                    <p className={styles.statValue}>{result.totalRows}</p>
+                    <p className={styles.statValue}>{result.totalRowsSeen}</p>
                   </div>
                   <div>
-                    <p className={styles.statLabel}>Valid rows</p>
-                    <p className={styles.statValue}>{result.validRows}</p>
+                    <p className={styles.statLabel}>Imported rows</p>
+                    <p className={styles.statValue}>{result.importedCount}</p>
                   </div>
                   <div>
-                    <p className={styles.statLabel}>Skipped rows</p>
-                    <p className={styles.statValue}>{result.skippedRows}</p>
+                    <p className={styles.statLabel}>Skipped (missing account #)</p>
+                    <p className={styles.statValue}>{result.skippedMissingAccountNumber}</p>
+                  </div>
+                  <div>
+                    <p className={styles.statLabel}>Skipped (invalid account #)</p>
+                    <p className={styles.statValue}>{result.skippedInvalidAccountNumber}</p>
                   </div>
                 </div>
+
+                {result.warning && <div className={styles.error}>{result.warning}</div>}
 
                 <div className={styles.actions}>
                   <Link className={styles.link} href={`/campaigns/${result.campaignId}`}>

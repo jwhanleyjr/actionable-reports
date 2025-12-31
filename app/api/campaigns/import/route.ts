@@ -57,7 +57,8 @@ function parseWorksheet(buffer: ArrayBuffer): { accountRows: ParsedRow[]; counts
   let skippedMissingAccountNumber = 0;
   let skippedInvalidAccountNumber = 0;
 
-  for (const [index, row] of rows.slice(1).entries()) {
+  for (let i = 1; i < rows.length; i += 1) {
+    const row = rows[i];
     totalRowsSeen += 1;
     const cellValue = Array.isArray(row) ? row[accountNumberIndex] : undefined;
     const value = typeof cellValue === 'string' ? cellValue.trim() : cellValue;
@@ -70,7 +71,7 @@ function parseWorksheet(buffer: ArrayBuffer): { accountRows: ParsedRow[]; counts
     const accountId = Number(value);
 
     if (Number.isFinite(accountId)) {
-      accountRows.push({ accountId, rowNumber: index + 2 });
+      accountRows.push({ accountId, rowNumber: i + 1 });
     } else {
       skippedInvalidAccountNumber += 1;
     }
