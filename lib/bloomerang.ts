@@ -127,4 +127,48 @@ export async function getHousehold(householdId: number) {
   return request(`/households/${householdId}`);
 }
 
+type ConstituentSearchResult = {
+  accountId?: number;
+  constituentId?: number;
+  id?: number;
+};
+
+type ConstituentSearchResponse = {
+  items?: ConstituentSearchResult[];
+  results?: ConstituentSearchResult[];
+} | ConstituentSearchResult[];
+
+function extractSearchResults(response: ConstituentSearchResponse): ConstituentSearchResult[] {
+  if (Array.isArray(response)) {
+    return response;
+  }
+
+  if (Array.isArray(response?.items)) {
+    return response.items;
+  }
+
+  if (Array.isArray(response?.results)) {
+    return response.results;
+  }
+
+  return [];
+}
+
+export async function findConstituentIdByAccountNumber(accountNumber: string): Promise<number | null> {
+  const params = new URLSearchParams({ skip: '0', take: '1', search: accountNumber });
+  const response = (await request(`/constituents/search?${params.toString()}`)) as ConstituentSearchResponse;
+  const [firstResult] = extractSearchResults(response);
+
+  const candidate =
+    typeof firstResult?.accountId === 'number'
+      ? firstResult.accountId
+      : typeof firstResult?.constituentId === 'number'
+        ? firstResult.constituentId
+        : typeof firstResult?.id === 'number'
+          ? firstResult.id
+          : null;
+
+  return Number.isFinite(candidate) ? (candidate as number) : null;
+}
+
 export { BloomerangRequestError };

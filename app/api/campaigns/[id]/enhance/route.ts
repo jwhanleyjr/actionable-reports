@@ -1,6 +1,11 @@
 import { NextResponse } from 'next/server';
 
-import { BloomerangRequestError, getConstituent, getHousehold } from '@/lib/bloomerang';
+import {
+  BloomerangRequestError,
+  findConstituentIdByAccountNumber,
+  getConstituent,
+  getHousehold,
+} from '@/lib/bloomerang';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 
 export const dynamic = 'force-dynamic';
@@ -53,16 +58,40 @@ export async function POST(_request: Request, { params }: Params) {
   const householdCache = new Map<number, HouseholdProfile>();
   const householdMemberCache = new Map<string, { household_id: number; member_account_id: number }>();
 
-  const accountIds = Array.from(
+  function normalizeAccountNumber(value: unknown): string | null {
+    if (value === null || value === undefined) {
+      return null;
+    }
+
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      return trimmed.length > 0 ? trimmed : null;
+    }
+
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return String(value);
+    }
+
+    return null;
+  }
+
+  const accountNumbers = Array.from(
     new Set(
       importRows
-        .map((row) => Number(row.account_number))
-        .filter((value) => typeof value === 'number' && Number.isFinite(value))
+        .map((row) => normalizeAccountNumber(row.account_number))
+        .filter((value): value is string => typeof value === 'string' && value.length > 0)
     )
   );
 
   try {
-    for (const accountId of accountIds) {
+    for (const accountNumber of accountNumbers) {
+      const accountId = await findConstituentIdByAccountNumber(accountNumber);
+
+      if (!accountId) {
+        console.warn(`No constituent found for account number ${accountNumber}`);
+        continue;
+      }
+
       await processConstituent(accountId, constituentCache, householdCache, householdMemberCache);
     }
   } catch (error) {
