@@ -1,36 +1,34 @@
 import { NextResponse } from 'next/server';
 import * as XLSX from 'xlsx';
 
-import { addImportRows, createCampaign, usingMockStorage } from '@/lib/dataStore';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 
 export const dynamic = 'force-dynamic';
 
+type ParsedRow = Record<string, unknown>;
+
 type ImportCounts = {
-  totalRowsSeen: number;
-  importedCount: number;
-  skippedMissingAccountNumber: number;
-  skippedInvalidAccountNumber: number;
+  totalRows: number;
+  validRows: number;
+  skippedRows: number;
 };
 
-type ParsedRow = { accountNumber: string; accountId: number; rowNumber: number; sourceRow: unknown[] };
+function extractAccountId(row: ParsedRow): number | null {
+  const matchingKey = Object.keys(row).find(
+    (key) => key.toLowerCase() === 'account_id'
+  );
 
-class MissingAccountNumberColumnError extends Error {}
+  if (!matchingKey) {
+    return null;
+  }
 
-function isAccountHeader(value: unknown): boolean {
-  if (typeof value !== 'string') return false;
+  const rawValue = row[matchingKey];
+  const accountId = Number(rawValue);
 
-  const normalized = value.replace(/[^a-z0-9#]+/gi, '').toLowerCase();
-
-  return [
-    'accountnumber',
-    'account#',
-    'acctnumber',
-    'accountno',
-  ].includes(normalized);
+  return Number.isFinite(accountId) ? accountId : null;
 }
 
-function parseWorksheet(buffer: ArrayBuffer): { accountRows: ParsedRow[]; counts: ImportCounts } {
+function parseWorksheet(buffer: ArrayBuffer): { accountIds: number[]; counts: ImportCounts } {
   const workbook = XLSX.read(buffer, { type: 'array' });
   const firstSheetName = workbook.SheetNames[0];
 
@@ -39,53 +37,27 @@ function parseWorksheet(buffer: ArrayBuffer): { accountRows: ParsedRow[]; counts
   }
 
   const worksheet = workbook.Sheets[firstSheetName];
-  const rows: unknown[][] = XLSX.utils.sheet_to_json<unknown[]>(worksheet, {
-    header: 1,
-    defval: null,
-    blankrows: true,
-  });
+  const rows = XLSX.utils.sheet_to_json<ParsedRow>(worksheet, { defval: null });
 
-  const headerRow = rows[0] ?? [];
-  const accountNumberIndex = headerRow.findIndex(isAccountHeader);
+  const accountIds: number[] = [];
 
-  if (accountNumberIndex === -1) {
-    throw new MissingAccountNumberColumnError('Account Number column is missing.');
-  }
+  for (const row of rows) {
+    const accountId = extractAccountId(row);
 
-  const accountRows: ParsedRow[] = [];
-  let totalRowsSeen = 0;
-  let skippedMissingAccountNumber = 0;
-  let skippedInvalidAccountNumber = 0;
-
-  for (let i = 1; i < rows.length; i += 1) {
-    const row = rows[i];
-    totalRowsSeen += 1;
-    const cellValue = Array.isArray(row) ? row[accountNumberIndex] : undefined;
-    const value = typeof cellValue === 'string' ? cellValue.trim() : cellValue;
-
-    if (value === null || value === undefined || value === '') {
-      skippedMissingAccountNumber += 1;
-      continue;
-    }
-
-    const accountId = Number(value);
-
-    if (Number.isFinite(accountId)) {
-      const accountNumber = typeof value === 'string' ? value : String(accountId);
-      const sourceRow = Array.isArray(row) ? row : [];
-      accountRows.push({ accountNumber, accountId, rowNumber: i + 1, sourceRow });
-    } else {
-      skippedInvalidAccountNumber += 1;
+    if (accountId !== null) {
+      accountIds.push(accountId);
     }
   }
+
+  const totalRows = rows.length;
+  const validRows = accountIds.length;
 
   return {
-    accountRows,
+    accountIds,
     counts: {
-      totalRowsSeen,
-      importedCount: accountRows.length,
-      skippedMissingAccountNumber,
-      skippedInvalidAccountNumber,
+      totalRows,
+      validRows,
+      skippedRows: Math.max(totalRows - validRows, 0),
     },
   };
 }
@@ -94,13 +66,6 @@ export async function POST(request: Request) {
   try {
     const formData = await request.formData();
     const file = formData.get('file');
-    const name = formData.get('name');
-
-    if (typeof name !== 'string' || name.trim().length === 0) {
-      return NextResponse.json({ error: 'Campaign name is required.' }, { status: 400 });
-    }
-
-    const campaignName = name.trim();
 
     if (!(file instanceof File)) {
       return NextResponse.json({ error: 'A .xlsx file is required.' }, { status: 400 });
@@ -111,96 +76,31 @@ export async function POST(request: Request) {
     }
 
     const buffer = await file.arrayBuffer();
-
-    let parsed;
-    try {
-      parsed = parseWorksheet(buffer);
-    } catch (error) {
-      if (error instanceof MissingAccountNumberColumnError) {
-        return NextResponse.json(
-          { error: 'The uploaded file is missing the Account Number column.' },
-          { status: 400 }
-        );
-      }
-      throw error;
-    }
-
-    const { accountRows, counts } = parsed;
-    const statusCode = counts.importedCount === 0 ? 200 : 201;
-    if (usingMockStorage()) {
-      const campaign = createCampaign(campaignName);
-      addImportRows(
-        campaign.id,
-        accountRows.map((row) => row.accountId)
-      );
-
-      return NextResponse.json(
-        {
-          campaign: { id: campaign.id, name: campaign.name },
-          totalRowsSeen: counts.totalRowsSeen,
-          importedCount: counts.importedCount,
-          skippedMissingAccountNumber: counts.skippedMissingAccountNumber,
-          skippedInvalidAccountNumber: counts.skippedInvalidAccountNumber,
-          ...(counts.importedCount === 0
-            ? { warning: 'No rows were imported because all rows were missing or invalid.' }
-            : {}),
-        },
-        { status: statusCode }
-      );
-    }
+    const { accountIds, counts } = parseWorksheet(buffer);
 
     const supabase = getSupabaseAdmin();
 
     const { data: campaign, error: campaignError } = await supabase
       .from('campaigns')
-      .insert({ name: campaignName })
-      .select('id, name')
+      .insert({ name: `Imported campaign ${new Date().toISOString()}` })
+      .select('id')
       .single();
 
-    if (campaignError) {
-      console.error('Failed to create campaign record', campaignError);
-      return NextResponse.json(
-        {
-          error: 'Failed to create campaign record.',
-          message: campaignError.message,
-          code: campaignError.code,
-          details: campaignError.details,
-          hint: campaignError.hint,
-        },
-        { status: 500 }
-      );
-    }
-
-    if (!campaign) {
-      console.error('Failed to create campaign record: campaign missing from response');
+    if (campaignError || !campaign) {
       return NextResponse.json(
         { error: 'Failed to create campaign record.' },
         { status: 500 }
       );
     }
 
-    if (accountRows.length > 0) {
+    if (accountIds.length > 0) {
       const { error: rowsError } = await supabase
         .from('campaign_import_rows')
-        .insert(
-          accountRows.map((row) => ({
-            campaign_id: campaign.id,
-            row_number: row.rowNumber,
-            account_number: row.accountNumber,
-            source_row: row.sourceRow,
-          }))
-        );
+        .insert(accountIds.map((accountId) => ({ campaign_id: campaign.id, account_id: accountId })));
 
       if (rowsError) {
-        console.error('Failed to store imported rows', rowsError);
         return NextResponse.json(
-          {
-            error: 'Failed to store imported rows.',
-            message: rowsError.message,
-            code: rowsError.code,
-            details: rowsError.details,
-            hint: rowsError.hint,
-          },
+          { error: 'Failed to store imported rows.' },
           { status: 500 }
         );
       }
@@ -208,16 +108,12 @@ export async function POST(request: Request) {
 
     return NextResponse.json(
       {
-        campaign: { id: campaign.id, name: campaign.name },
-        totalRowsSeen: counts.totalRowsSeen,
-        importedCount: counts.importedCount,
-        skippedMissingAccountNumber: counts.skippedMissingAccountNumber,
-        skippedInvalidAccountNumber: counts.skippedInvalidAccountNumber,
-        ...(counts.importedCount === 0
-          ? { warning: 'No rows were imported because all rows were missing or invalid.' }
-          : {}),
+        campaignId: campaign.id,
+        totalRows: counts.totalRows,
+        validRows: counts.validRows,
+        skippedRows: counts.skippedRows,
       },
-      { status: statusCode }
+      { status: 201 }
     );
   } catch (error) {
     console.error('Import failed', error);
