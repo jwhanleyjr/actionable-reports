@@ -82,15 +82,36 @@ export async function calculateGivingStats(constituentId: number, apiKey: string
 }
 
 function normalizeTransactions(data: unknown): Transaction[] {
-  if (Array.isArray((data as { Results?: unknown[] })?.Results)) {
-    return ((data as { Results: unknown[] }).Results).filter((entry): entry is Transaction => !!entry && typeof entry === 'object');
-  }
+  const attemptNormalize = (value: unknown): Transaction[] => {
+    if (Array.isArray(value)) {
+      return value.filter((entry): entry is Transaction => !!entry && typeof entry === 'object');
+    }
 
-  if (Array.isArray(data)) {
-    return (data as unknown[]).filter((entry): entry is Transaction => !!entry && typeof entry === 'object');
-  }
+    if (value && typeof value === 'object') {
+      const record = value as Record<string, unknown>;
+      const keys = ['Results', 'results', 'Transactions', 'transactions', 'Items', 'items'];
 
-  return [];
+      for (const key of keys) {
+        const nested = record[key];
+        const normalized = attemptNormalize(nested);
+
+        if (normalized.length) {
+          return normalized;
+        }
+      }
+
+      if (record.Data && typeof record.Data === 'object') {
+        const normalized = attemptNormalize(record.Data);
+        if (normalized.length) {
+          return normalized;
+        }
+      }
+    }
+
+    return [];
+  };
+
+  return attemptNormalize(data);
 }
 
 function summarizeTransactions(transactions: Transaction[]) {

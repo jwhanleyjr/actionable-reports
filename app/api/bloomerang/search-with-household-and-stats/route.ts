@@ -304,10 +304,18 @@ function computeHouseholdTotals(members: MemberWithStats[]): HouseholdTotals {
 
 function getMemberArray(data: unknown): Array<Record<string, unknown>> {
   const candidate = (data as { members?: unknown; Members?: unknown; Results?: unknown[] }) ?? {};
-  const fromRoot = extractMemberList(candidate.members) ?? extractMemberList(candidate.Members);
+  const memberFields = ['members', 'Members', 'HouseholdMembers', 'householdMembers', 'Constituents', 'constituents'];
+  const collected: unknown[] = [];
 
-  if (fromRoot) {
-    return fromRoot.filter((value): value is Record<string, unknown> => !!value && typeof value === 'object');
+  for (const field of memberFields) {
+    const list = extractMemberList((candidate as Record<string, unknown>)[field]);
+    if (list) {
+      collected.push(...list);
+    }
+  }
+
+  if (collected.length) {
+    return collected.filter((value): value is Record<string, unknown> => !!value && typeof value === 'object');
   }
 
   const firstResult = Array.isArray(candidate.Results)
@@ -315,11 +323,12 @@ function getMemberArray(data: unknown): Array<Record<string, unknown>> {
     : null;
 
   if (firstResult && typeof firstResult === 'object') {
-    const nested = extractMemberList((firstResult as { members?: unknown; Members?: unknown }).members)
-      ?? extractMemberList((firstResult as { Members?: unknown }).Members)
-      ?? [];
-
-    return nested.filter((value): value is Record<string, unknown> => !!value && typeof value === 'object');
+    for (const field of memberFields) {
+      const nested = extractMemberList((firstResult as Record<string, unknown>)[field]);
+      if (nested?.length) {
+        return nested.filter((value): value is Record<string, unknown> => !!value && typeof value === 'object');
+      }
+    }
   }
 
   return [];
