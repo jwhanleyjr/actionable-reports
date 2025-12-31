@@ -154,6 +154,19 @@ function extractSearchResults(response: ConstituentSearchResponse): ConstituentS
   return [];
 }
 
+function toNumber(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === 'string' && value.trim().length > 0) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  return null;
+}
+
 export async function findConstituentIdByAccountNumber(accountNumber: string): Promise<{
   constituentId: number | null;
   url: string;
@@ -169,15 +182,15 @@ export async function findConstituentIdByAccountNumber(accountNumber: string): P
   const [firstResult] = extractSearchResults(response);
 
   const candidate =
-    typeof firstResult?.accountId === 'number'
-      ? firstResult.accountId
-      : typeof firstResult?.constituentId === 'number'
-        ? firstResult.constituentId
-        : typeof firstResult?.id === 'number'
-          ? firstResult.id
-          : null;
+    toNumber(firstResult?.constituentId) ??
+    toNumber(firstResult?.accountId) ??
+    toNumber(firstResult?.id);
 
   const constituentId = Number.isFinite(candidate) ? (candidate as number) : null;
+
+  if (!constituentId) {
+    console.warn('No constituent id found in search response', { searchUrl, firstResult });
+  }
 
   return { constituentId, url: searchUrl };
 }
