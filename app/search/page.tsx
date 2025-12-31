@@ -105,7 +105,22 @@ export default function SearchPage() {
         return;
       }
 
-      setMembers(extractMembers(householdPayload.data));
+      const memberDetailsFromHousehold = extractMembers(householdPayload.data);
+
+      if (memberDetailsFromHousehold.length) {
+        setMembers(memberDetailsFromHousehold);
+        return;
+      }
+
+      const memberIds = extractMemberIds(householdPayload.data);
+
+      if (!memberIds.length) {
+        setMembers([]);
+        return;
+      }
+
+      const fetchedMembers = await fetchMembersByIds(memberIds);
+      setMembers(fetchedMembers);
     } catch (err) {
       console.error('Search request failed', err);
       setError('Unable to complete the search request.');
@@ -248,6 +263,33 @@ export default function SearchPage() {
   );
 }
 
+async function fetchMembersByIds(memberIds: number[]): Promise<HouseholdMember[]> {
+  const responses = await Promise.all(memberIds.map(async (id) => {
+    try {
+      const response = await fetch('/api/bloomerang/constituent', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ constituentId: id }),
+      });
+
+      const payload = (await response.json()) as SearchResult;
+
+      if (!response.ok || !payload.ok) {
+        return null;
+      }
+
+      return buildMemberFromConstituentPayload(payload.data);
+    } catch (error) {
+      console.error('Failed to fetch member', { id, error });
+      return null;
+    }
+  }));
+
+  return responses.filter((member): member is HouseholdMember => !!member);
+}
+
 function extractHouseholdId(data: unknown): number | null {
   const firstResult = Array.isArray((data as { Results?: unknown[] })?.Results)
     ? (data as { Results: unknown[] }).Results[0]
@@ -362,6 +404,37 @@ function extractConstituentId(data: unknown): number | null {
   ]);
 }
 
+function extractMemberIds(data: unknown): number[] {
+  const root = (data as { MemberIds?: unknown; memberIds?: unknown; Results?: unknown[] }) ?? {};
+
+  const gatherIds = (value: unknown): number[] => {
+    if (!Array.isArray(value)) {
+      return [];
+    }
+
+    return value
+      .map((entry) => (typeof entry === 'number' ? entry : Number(entry)))
+      .filter((id): id is number => Number.isFinite(id));
+  };
+
+  const rootIds = gatherIds(root.MemberIds ?? root.memberIds);
+
+  if (rootIds.length) {
+    return rootIds;
+  }
+
+  const firstResult = Array.isArray(root.Results)
+    ? root.Results[0]
+    : null;
+
+  if (firstResult && typeof firstResult === 'object') {
+    return gatherIds((firstResult as { MemberIds?: unknown; memberIds?: unknown }).MemberIds
+      ?? (firstResult as { memberIds?: unknown }).memberIds);
+  }
+
+  return [];
+}
+
 function extractMembers(data: unknown): HouseholdMember[] {
   const members = getMemberArray(data);
 
@@ -392,6 +465,36 @@ function extractMembers(data: unknown): HouseholdMember[] {
   }, []);
 }
 
+function buildMemberFromConstituentPayload(data: unknown): HouseholdMember | null {
+  const record = normalizeRecord(data);
+
+  if (!record) {
+    return null;
+  }
+
+  const id = pickNumber(record, ['id', 'Id', 'accountNumber', 'AccountNumber', 'constituentId', 'ConstituentId']);
+
+  if (!Number.isFinite(id)) {
+    return null;
+  }
+
+  const name = buildMemberName(record, id as number);
+  const phone = pickString(record, [
+    'PrimaryPhone.Number',
+    'primaryPhone.number',
+    'primaryPhone.Number',
+    'PrimaryPhone.number',
+  ]);
+  const email = pickString(record, [
+    'PrimaryEmail.Value',
+    'primaryEmail.value',
+    'primaryEmail.Value',
+    'PrimaryEmail.value',
+  ]);
+
+  return { id: id as number, name, phone, email };
+}
+
 function getMemberArray(data: unknown): Array<Record<string, unknown>> {
   const candidate = (data as { members?: unknown; Members?: unknown; Results?: unknown[] }) ?? {};
   const fromRoot = Array.isArray(candidate.members)
@@ -419,6 +522,22 @@ function getMemberArray(data: unknown): Array<Record<string, unknown>> {
   }
 
   return [];
+}
+
+function normalizeRecord(data: unknown): Record<string, unknown> | null {
+  if (data && typeof data === 'object') {
+    const fromResults = Array.isArray((data as { Results?: unknown[] }).Results)
+      ? (data as { Results: unknown[] }).Results[0]
+      : null;
+
+    if (fromResults && typeof fromResults === 'object') {
+      return fromResults as Record<string, unknown>;
+    }
+
+    return data as Record<string, unknown>;
+  }
+
+  return null;
 }
 
 function pickNumber(source: Record<string, unknown>, keys: string[]): number | null {
