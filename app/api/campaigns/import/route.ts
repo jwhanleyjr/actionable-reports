@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server';
 import * as XLSX from 'xlsx';
 
-import { supabaseAdmin } from '@/lib/supabaseAdmin';
+import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
+
+export const dynamic = 'force-dynamic';
 
 type ParsedRow = Record<string, unknown>;
 
@@ -76,7 +78,9 @@ export async function POST(request: Request) {
     const buffer = await file.arrayBuffer();
     const { accountIds, counts } = parseWorksheet(buffer);
 
-    const { data: campaign, error: campaignError } = await supabaseAdmin
+    const supabase = getSupabaseAdmin();
+
+    const { data: campaign, error: campaignError } = await supabase
       .from('campaigns')
       .insert({ name: `Imported campaign ${new Date().toISOString()}` })
       .select('id')
@@ -90,7 +94,7 @@ export async function POST(request: Request) {
     }
 
     if (accountIds.length > 0) {
-      const { error: rowsError } = await supabaseAdmin
+      const { error: rowsError } = await supabase
         .from('campaign_import_rows')
         .insert(accountIds.map((accountId) => ({ campaign_id: campaign.id, account_id: accountId })));
 

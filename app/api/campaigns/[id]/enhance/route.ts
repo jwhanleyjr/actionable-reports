@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server';
 
 import { getConstituent, getHousehold } from '@/lib/bloomerang';
-import { supabaseAdmin } from '@/lib/supabaseAdmin';
+import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
+
+export const dynamic = 'force-dynamic';
 
 type Params = {
   params: { id?: string };
@@ -26,7 +28,9 @@ export async function POST(_request: Request, { params }: Params) {
     return NextResponse.json({ error: 'Invalid campaign id' }, { status: 400 });
   }
 
-  const { data: importRows, error: importError } = await supabaseAdmin
+  const supabase = getSupabaseAdmin();
+
+  const { data: importRows, error: importError } = await supabase
     .from('campaign_import_rows')
     .select('account_id')
     .eq('campaign_id', campaignId);
@@ -77,13 +81,13 @@ export async function POST(_request: Request, { params }: Params) {
 
   const upsertResults = await Promise.all([
     constituentRecords.length
-      ? supabaseAdmin.from('constituents').upsert(constituentRecords, { onConflict: 'account_id' })
+      ? supabase.from('constituents').upsert(constituentRecords, { onConflict: 'account_id' })
       : Promise.resolve({ error: null }),
     householdRecords.length
-      ? supabaseAdmin.from('households').upsert(householdRecords, { onConflict: 'household_id' })
+      ? supabase.from('households').upsert(householdRecords, { onConflict: 'household_id' })
       : Promise.resolve({ error: null }),
     householdMemberRecords.length
-      ? supabaseAdmin
+      ? supabase
           .from('household_members')
           .upsert(householdMemberRecords, { onConflict: 'household_id,member_account_id' })
       : Promise.resolve({ error: null }),

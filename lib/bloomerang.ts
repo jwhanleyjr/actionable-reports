@@ -1,20 +1,31 @@
 import 'server-only';
 
 const BASE_URL = 'https://api.bloomerang.co';
-const API_KEY = process.env.BLOOMERANG_API_KEY;
-
-if (!API_KEY) {
-  throw new Error('BLOOMERANG_API_KEY is not set');
-}
+let apiKey: string | null = null;
 
 async function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function getApiKey(): string {
+  if (apiKey) {
+    return apiKey;
+  }
+
+  const envKey = process.env.BLOOMERANG_API_KEY;
+
+  if (!envKey) {
+    throw new Error('BLOOMERANG_API_KEY is not set');
+  }
+
+  apiKey = envKey;
+  return apiKey;
+}
+
 async function request<T>(path: string, options: RequestInit = {}, retries = 3): Promise<T> {
   const url = `${BASE_URL}${path}`;
   const headers = new Headers(options.headers);
-  headers.set('X-API-KEY', API_KEY as string);
+  headers.set('X-API-KEY', getApiKey());
   headers.set('Accept', 'application/json');
 
   try {
