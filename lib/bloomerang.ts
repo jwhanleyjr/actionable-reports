@@ -155,8 +155,13 @@ function extractSearchResults(response: ConstituentSearchResponse): ConstituentS
 }
 
 export async function findConstituentIdByAccountNumber(accountNumber: string): Promise<number | null> {
-  const params = new URLSearchParams({ skip: '0', take: '1', search: accountNumber });
-  const response = (await request(`/constituents/search?${params.toString()}`)) as ConstituentSearchResponse;
+  const normalizedBase = getBaseUrl().endsWith('/') ? getBaseUrl() : `${getBaseUrl()}/`;
+  const url = new URL('/constituents/search', normalizedBase);
+  url.searchParams.set('skip', '0');
+  url.searchParams.set('take', '1');
+  url.searchParams.set('search', accountNumber);
+
+  const response = (await request(url.toString())) as ConstituentSearchResponse;
   const [firstResult] = extractSearchResults(response);
 
   const candidate =
