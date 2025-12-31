@@ -19,6 +19,12 @@ type MemberWithStats = {
     lastGiftAmount: number | null;
     lastGiftDate: string | null;
   };
+  recentTransactions?: Array<{
+    id: string | number | null;
+    amount: number;
+    date: string | null;
+    type: string | null;
+  }>;
   statsError?: string;
   constituentError?: string;
 };
@@ -183,7 +189,14 @@ async function getHousehold(householdId: number, apiKey: string) {
 async function loadMembersFromHousehold(household: Record<string, unknown>, apiKey: string): Promise<MemberWithStats[]> {
   const memberRecords = getMemberArray(household);
   const ids = memberRecords
-    .map((member) => pickNumber(member, ['accountId', 'AccountId', 'constituentId', 'ConstituentId']))
+    .map((member) => pickNumber(member, [
+      'accountId',
+      'AccountId',
+      'constituentId',
+      'ConstituentId',
+      'Id',
+      'id',
+    ]))
     .filter((id): id is number => Number.isFinite(id));
 
   const uniqueIds = Array.from(new Set(ids));
@@ -207,6 +220,7 @@ async function buildMemberWithStats(constituentId: number, apiKey: string, exist
     constituent: profileResult.ok ? profileResult.constituent : null,
     constituentId,
     stats: statsResult.ok ? statsResult.stats : undefined,
+    recentTransactions: statsResult.ok ? statsResult.recentTransactions : undefined,
     statsError: statsResult.ok ? undefined : statsResult.error ?? statsResult.bodyPreview,
     constituentError: profileResult.ok ? undefined : profileResult.error,
   };
@@ -266,11 +280,7 @@ function computeHouseholdTotals(members: MemberWithStats[]): HouseholdTotals {
 
 function getMemberArray(data: unknown): Array<Record<string, unknown>> {
   const candidate = (data as { members?: unknown; Members?: unknown; Results?: unknown[] }) ?? {};
-  const fromRoot = Array.isArray(candidate.members)
-    ? candidate.members
-    : Array.isArray(candidate.Members)
-      ? candidate.Members
-      : null;
+  const fromRoot = extractMemberList(candidate.members) ?? extractMemberList(candidate.Members);
 
   if (fromRoot) {
     return fromRoot.filter((value): value is Record<string, unknown> => !!value && typeof value === 'object');
@@ -281,16 +291,30 @@ function getMemberArray(data: unknown): Array<Record<string, unknown>> {
     : null;
 
   if (firstResult && typeof firstResult === 'object') {
-    const nested = Array.isArray((firstResult as { members?: unknown; Members?: unknown }).members)
-      ? (firstResult as { members: unknown[] }).members
-      : Array.isArray((firstResult as { Members?: unknown }).Members)
-        ? (firstResult as { Members: unknown[] }).Members
-        : [];
+    const nested = extractMemberList((firstResult as { members?: unknown; Members?: unknown }).members)
+      ?? extractMemberList((firstResult as { Members?: unknown }).Members)
+      ?? [];
 
     return nested.filter((value): value is Record<string, unknown> => !!value && typeof value === 'object');
   }
 
   return [];
+}
+
+function extractMemberList(value: unknown): unknown[] | null {
+  if (Array.isArray(value)) {
+    return value;
+  }
+
+  if (value && typeof value === 'object') {
+    const asRecord = value as Record<string, unknown>;
+
+    if (Array.isArray(asRecord.Results)) {
+      return asRecord.Results as unknown[];
+    }
+  }
+
+  return null;
 }
 
 async function mapWithConcurrency<T, R>(items: T[], limit: number, iterator: (item: T) => Promise<R>): Promise<R[]> {

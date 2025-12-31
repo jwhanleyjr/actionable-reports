@@ -18,6 +18,7 @@ type MemberWithStats = {
   constituent: Record<string, unknown> | null;
   constituentId: number;
   stats?: GivingStats;
+  recentTransactions?: Array<{ id: string | number | null; amount: number; date: string | null; type: string | null }>;
   statsError?: string;
   constituentError?: string;
 };
@@ -254,6 +255,27 @@ export default function SearchPage() {
                               label="Last Gift Date"
                               value={member.stats.lastGiftDate ? formatDate(member.stats.lastGiftDate) : '—'}
                             />
+                            <div className={styles.transactionsBlock}>
+                              <p className={styles.transactionsTitle}>Recent Transactions</p>
+                              {member.recentTransactions?.length ? (
+                                <ul className={styles.transactionList}>
+                                  {member.recentTransactions.map((txn, index) => (
+                                    <li key={`${member.constituentId}-${txn.id ?? index}`} className={styles.transactionItem}>
+                                      <div className={styles.transactionMain}>
+                                        <span className={styles.transactionAmount}>{formatCurrency(txn.amount)}</span>
+                                        <span className={styles.transactionDate}>{txn.date ? formatDate(txn.date) : 'No date'}</span>
+                                      </div>
+                                      <div className={styles.transactionMeta}>
+                                        {txn.type && <span className={styles.metaPill}>{txn.type}</span>}
+                                        {txn.id !== null && <span className={styles.metaPill}>ID: {txn.id}</span>}
+                                      </div>
+                                    </li>
+                                  ))}
+                                </ul>
+                              ) : (
+                                <p className={styles.muted}>No recent transactions.</p>
+                              )}
+                            </div>
                           </div>
                         ) : (
                           <p className={styles.muted}>
