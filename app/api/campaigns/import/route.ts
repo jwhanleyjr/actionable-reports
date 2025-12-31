@@ -13,7 +13,7 @@ type ImportCounts = {
   skippedInvalidAccountNumber: number;
 };
 
-type ParsedRow = { accountId: number; rowNumber: number };
+type ParsedRow = { accountNumber: string; accountId: number; rowNumber: number; sourceRow: unknown[] };
 
 class MissingAccountNumberColumnError extends Error {}
 
@@ -71,7 +71,9 @@ function parseWorksheet(buffer: ArrayBuffer): { accountRows: ParsedRow[]; counts
     const accountId = Number(value);
 
     if (Number.isFinite(accountId)) {
-      accountRows.push({ accountId, rowNumber: i + 1 });
+      const accountNumber = typeof value === 'string' ? value : String(accountId);
+      const sourceRow = Array.isArray(row) ? row : [];
+      accountRows.push({ accountNumber, accountId, rowNumber: i + 1, sourceRow });
     } else {
       skippedInvalidAccountNumber += 1;
     }
@@ -183,8 +185,9 @@ export async function POST(request: Request) {
         .insert(
           accountRows.map((row) => ({
             campaign_id: campaign.id,
-            account_id: row.accountId,
             row_number: row.rowNumber,
+            account_number: row.accountNumber,
+            source_row: row.sourceRow,
           }))
         );
 

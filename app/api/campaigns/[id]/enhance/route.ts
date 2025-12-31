@@ -32,7 +32,7 @@ export async function POST(_request: Request, { params }: Params) {
 
   const { data: importRows, error: importError } = await supabase
     .from('campaign_import_rows')
-    .select('account_id')
+    .select('account_number')
     .eq('campaign_id', campaignId);
 
   if (importError) {
@@ -53,7 +53,13 @@ export async function POST(_request: Request, { params }: Params) {
   const householdCache = new Map<number, HouseholdProfile>();
   const householdMemberCache = new Map<string, { household_id: number; member_account_id: number }>();
 
-  const accountIds = Array.from(new Set(importRows.map((row) => row.account_id)));
+  const accountIds = Array.from(
+    new Set(
+      importRows
+        .map((row) => Number(row.account_number))
+        .filter((value) => typeof value === 'number' && Number.isFinite(value))
+    )
+  );
 
   try {
     for (const accountId of accountIds) {

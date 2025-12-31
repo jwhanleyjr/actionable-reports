@@ -215,8 +215,8 @@ export default function CampaignDashboard({ initialCampaigns, initialError }: Pr
                 <p className={styles.label}>Excel workbook</p>
                 <h2 className={styles.panelTitle}>Upload .xlsx to begin</h2>
                 <p className={styles.panelHint}>
-                  The file must include an <code>account_id</code> column. Each valid row is added to a
-                  new campaign import.
+                  The file must include an Account Number column. Each valid row is added to a new
+                  campaign import.
                 </p>
               </div>
               <button className={styles.secondary} onClick={() => setShowUpload(false)}>
@@ -299,7 +299,7 @@ export default function CampaignDashboard({ initialCampaigns, initialError }: Pr
               <h3>Need a refresher?</h3>
               <ul>
                 <li>Only Excel workbooks (.xlsx) are accepted for imports.</li>
-                <li>Ensure the sheet includes a column named <code>account_id</code>.</li>
+                <li>Ensure the sheet includes an Account Number column.</li>
                 <li>
                   After upload, we will enhance the records and you can review them on the campaign results
                   page.
