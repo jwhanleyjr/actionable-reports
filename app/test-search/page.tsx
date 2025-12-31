@@ -6,7 +6,7 @@ export default function TestSearchPage() {
   const [accountNumber, setAccountNumber] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<unknown>(null);
+  const [result, setResult] = useState<unknown | null>(null);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -104,7 +104,7 @@ export default function TestSearchPage() {
         </div>
       )}
 
-      {result && (
+      {result !== null ? (
         <pre
           style={{
             backgroundColor: '#0b1224',
@@ -117,7 +117,7 @@ export default function TestSearchPage() {
         >
           {JSON.stringify(result, null, 2)}
         </pre>
-      )}
+      ) : null}
     </main>
   );
 }
