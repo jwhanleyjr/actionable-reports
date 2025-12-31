@@ -56,6 +56,7 @@ export async function GET(_request: Request, { params }: Params) {
 
     return NextResponse.json({
       campaign_id: campaignId,
+      campaign_name: campaign.name,
       households: householdsResponse,
     });
   }
@@ -65,7 +66,7 @@ export async function GET(_request: Request, { params }: Params) {
 
     const { data: campaign, error: campaignError } = await supabase
       .from('campaigns')
-      .select('id')
+      .select('id, name')
       .eq('id', campaignId)
       .maybeSingle();
 
@@ -137,6 +138,7 @@ export async function GET(_request: Request, { params }: Params) {
     if (householdsResponse.length === 0) {
       return NextResponse.json({
         campaign_id: campaignId,
+        campaign_name: campaign?.name ?? null,
         households: [],
         message: 'No households found for this campaign.',
       });
@@ -144,6 +146,7 @@ export async function GET(_request: Request, { params }: Params) {
 
     return NextResponse.json({
       campaign_id: campaignId,
+      campaign_name: campaign?.name ?? null,
       households: householdsResponse,
     });
   } catch (error) {

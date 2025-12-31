@@ -16,7 +16,7 @@ type ImportResponse = {
   error?: string;
 };
 
-type UploadState = 'idle' | 'uploading' | 'success' | 'error';
+type UploadState = 'idle' | 'uploading' | 'enhancing' | 'success' | 'error';
 
 type Campaign = {
   id: string;
@@ -115,6 +115,19 @@ export default function CampaignDashboard({ initialCampaigns, initialError }: Pr
       if (!response.ok) {
         setStatus('error');
         setError(payload.error || 'Unable to import the selected file.');
+        return;
+      }
+
+      setStatus('enhancing');
+
+      const enhanceResponse = await fetch(`/api/campaigns/${payload.campaign.id}/enhance`, {
+        method: 'POST',
+      });
+
+      if (!enhanceResponse.ok) {
+        const enhancePayload: { error?: string } = await enhanceResponse.json();
+        setStatus('error');
+        setError(enhancePayload.error || 'Enhancement failed for this campaign.');
         return;
       }
 
@@ -253,8 +266,16 @@ export default function CampaignDashboard({ initialCampaigns, initialError }: Pr
                 </div>
               </label>
 
-              <button className={styles.submit} type="submit" disabled={status === 'uploading'}>
-                {status === 'uploading' ? 'Uploading…' : 'Upload workbook'}
+              <button
+                className={styles.submit}
+                type="submit"
+                disabled={status === 'uploading' || status === 'enhancing'}
+              >
+                {status === 'uploading'
+                  ? 'Uploading…'
+                  : status === 'enhancing'
+                    ? 'Enhancing campaign…'
+                    : 'Upload workbook'}
               </button>
             </form>
 
