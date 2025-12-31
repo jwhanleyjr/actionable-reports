@@ -29,6 +29,7 @@ export default function SearchPage() {
   const [householdError, setHouseholdError] = useState<string | null>(null);
   const [members, setMembers] = useState<HouseholdMember[]>([]);
   const [singlePersonHousehold, setSinglePersonHousehold] = useState(false);
+  const [constituentName, setConstituentName] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -40,6 +41,7 @@ export default function SearchPage() {
     setHouseholdError(null);
     setMembers([]);
     setSinglePersonHousehold(false);
+    setConstituentName(null);
 
     const trimmed = accountNumber.trim();
     if (!trimmed) {
@@ -65,6 +67,8 @@ export default function SearchPage() {
       }
 
       setResult(payload);
+
+      setConstituentName(extractConstituentName(payload.data));
 
       const isInHousehold = extractIsInHousehold(payload.data);
 
@@ -168,7 +172,11 @@ export default function SearchPage() {
               ) : householdError ? (
                 <p className={styles.muted}>{householdError}</p>
               ) : singlePersonHousehold ? (
-                <p className={styles.muted}>Single-person household; skipping household lookup.</p>
+                constituentName ? (
+                  <p className={styles.muted}>{constituentName}</p>
+                ) : (
+                  <p className={styles.muted}>Single-person household; skipping household lookup.</p>
+                )
               ) : householdResult ? (
                 <pre className={styles.pre}>{JSON.stringify(householdResult, null, 2)}</pre>
               ) : (
@@ -183,7 +191,18 @@ export default function SearchPage() {
               ) : householdError ? (
                 <p className={styles.muted}>{householdError}</p>
               ) : singlePersonHousehold ? (
-                <p className={styles.muted}>Single-person household; no additional members.</p>
+                constituentName ? (
+                  <ul className={styles.memberList}>
+                    <li className={styles.memberItem} key="single-person-household">
+                      <div className={styles.memberName}>{constituentName}</div>
+                      <div className={styles.memberMeta}>
+                        <span className={styles.metaPill}>Single-member household</span>
+                      </div>
+                    </li>
+                  </ul>
+                ) : (
+                  <p className={styles.muted}>Single-person household; no additional members.</p>
+                )
               ) : members.length ? (
                 <ul className={styles.memberList}>
                   {members.map((member) => (
@@ -231,6 +250,40 @@ function extractIsInHousehold(data: unknown): boolean | null {
     ?? (firstResult as { isInHousehold?: unknown } | null)?.isInHousehold;
 
   return normalizeBoolean(value);
+}
+
+function extractConstituentName(data: unknown): string | null {
+  const firstResult = Array.isArray((data as { Results?: unknown[] })?.Results)
+    ? (data as { Results: unknown[] }).Results[0]
+    : null;
+
+  if (!firstResult || typeof firstResult !== 'object') {
+    return null;
+  }
+
+  const fromFullName = pickString(firstResult as Record<string, unknown>, ['fullName', 'FullName']);
+  if (fromFullName) {
+    return fromFullName;
+  }
+
+  const first = pickString(firstResult as Record<string, unknown>, ['firstName', 'FirstName']);
+  const last = pickString(firstResult as Record<string, unknown>, ['lastName', 'LastName']);
+  const combined = `${first ?? ''} ${last ?? ''}`.trim();
+
+  if (combined) {
+    return combined;
+  }
+
+  const fallbackId = pickNumber(firstResult as Record<string, unknown>, [
+    'accountNumber',
+    'AccountNumber',
+    'constituentId',
+    'ConstituentId',
+    'id',
+    'Id',
+  ]);
+
+  return fallbackId !== null ? `Constituent ${fallbackId}` : null;
 }
 
 function extractMembers(data: unknown): HouseholdMember[] {
