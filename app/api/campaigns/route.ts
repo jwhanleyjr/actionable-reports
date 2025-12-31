@@ -1,11 +1,20 @@
 import { NextResponse } from 'next/server';
 
+import { createCampaign, listCampaigns, usingMockStorage } from '@/lib/dataStore';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
   try {
+    if (usingMockStorage()) {
+      if (listCampaigns().length === 0) {
+        createCampaign('Sample campaign (mocked)');
+      }
+
+      return NextResponse.json({ campaigns: listCampaigns() });
+    }
+
     const supabase = getSupabaseAdmin();
     const { data, error } = await supabase
       .from('campaigns')

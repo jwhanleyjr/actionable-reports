@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import * as XLSX from 'xlsx';
 
+import { addImportRows, createCampaign, usingMockStorage } from '@/lib/dataStore';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 
 export const dynamic = 'force-dynamic';
@@ -8,24 +9,25 @@ export const dynamic = 'force-dynamic';
 type ParsedRow = Record<string, unknown>;
 
 type ImportCounts = {
-  totalRows: number;
-  validRows: number;
-  skippedRows: number;
+  totalRowsSeen: number;
+  importedCount: number;
+  skippedMissingAccountNumber: number;
+  skippedInvalidAccountNumber: number;
 };
 
-function extractAccountId(row: ParsedRow): number | null {
-  const matchingKey = Object.keys(row).find(
-    (key) => key.toLowerCase() === 'account_id'
-  );
+class MissingAccountNumberColumnError extends Error {}
 
-  if (!matchingKey) {
-    return null;
-  }
+function isAccountHeader(value: unknown): boolean {
+  if (typeof value !== 'string') return false;
 
-  const rawValue = row[matchingKey];
-  const accountId = Number(rawValue);
+  const normalized = value.replace(/[^a-z0-9#]+/gi, '').toLowerCase();
 
-  return Number.isFinite(accountId) ? accountId : null;
+  return [
+    'accountnumber',
+    'account#',
+    'acctnumber',
+    'accountno',
+  ].includes(normalized);
 }
 
 function parseWorksheet(buffer: ArrayBuffer): { accountIds: number[]; counts: ImportCounts } {
@@ -37,27 +39,50 @@ function parseWorksheet(buffer: ArrayBuffer): { accountIds: number[]; counts: Im
   }
 
   const worksheet = workbook.Sheets[firstSheetName];
-  const rows = XLSX.utils.sheet_to_json<ParsedRow>(worksheet, { defval: null });
+  const rows = XLSX.utils.sheet_to_json<ParsedRow[]>(worksheet, {
+    header: 1,
+    defval: null,
+    blankrows: true,
+  });
 
-  const accountIds: number[] = [];
+  const headerRow = rows[0] ?? [];
+  const accountNumberIndex = headerRow.findIndex(isAccountHeader);
 
-  for (const row of rows) {
-    const accountId = extractAccountId(row);
-
-    if (accountId !== null) {
-      accountIds.push(accountId);
-    }
+  if (accountNumberIndex === -1) {
+    throw new MissingAccountNumberColumnError('Account Number column is missing.');
   }
 
-  const totalRows = rows.length;
-  const validRows = accountIds.length;
+  const accountIds: number[] = [];
+  let totalRowsSeen = 0;
+  let skippedMissingAccountNumber = 0;
+  let skippedInvalidAccountNumber = 0;
+
+  for (const row of rows.slice(1)) {
+    totalRowsSeen += 1;
+    const cellValue = Array.isArray(row) ? row[accountNumberIndex] : undefined;
+    const value = typeof cellValue === 'string' ? cellValue.trim() : cellValue;
+
+    if (value === null || value === undefined || value === '') {
+      skippedMissingAccountNumber += 1;
+      continue;
+    }
+
+    const accountId = Number(value);
+
+    if (Number.isFinite(accountId)) {
+      accountIds.push(accountId);
+    } else {
+      skippedInvalidAccountNumber += 1;
+    }
+  }
 
   return {
     accountIds,
     counts: {
-      totalRows,
-      validRows,
-      skippedRows: Math.max(totalRows - validRows, 0),
+      totalRowsSeen,
+      importedCount: accountIds.length,
+      skippedMissingAccountNumber,
+      skippedInvalidAccountNumber,
     },
   };
 }
@@ -76,7 +101,40 @@ export async function POST(request: Request) {
     }
 
     const buffer = await file.arrayBuffer();
-    const { accountIds, counts } = parseWorksheet(buffer);
+
+    let parsed;
+    try {
+      parsed = parseWorksheet(buffer);
+    } catch (error) {
+      if (error instanceof MissingAccountNumberColumnError) {
+        return NextResponse.json(
+          { error: 'The uploaded file is missing the Account Number column.' },
+          { status: 400 }
+        );
+      }
+      throw error;
+    }
+
+    const { accountIds, counts } = parsed;
+    const statusCode = counts.importedCount === 0 ? 200 : 201;
+    if (usingMockStorage()) {
+      const campaign = createCampaign(`Imported campaign ${new Date().toISOString()}`);
+      addImportRows(campaign.id, accountIds);
+
+      return NextResponse.json(
+        {
+          campaignId: campaign.id,
+          totalRowsSeen: counts.totalRowsSeen,
+          importedCount: counts.importedCount,
+          skippedMissingAccountNumber: counts.skippedMissingAccountNumber,
+          skippedInvalidAccountNumber: counts.skippedInvalidAccountNumber,
+          ...(counts.importedCount === 0
+            ? { warning: 'No rows were imported because all rows were missing or invalid.' }
+            : {}),
+        },
+        { status: statusCode }
+      );
+    }
 
     const supabase = getSupabaseAdmin();
 
@@ -109,11 +167,15 @@ export async function POST(request: Request) {
     return NextResponse.json(
       {
         campaignId: campaign.id,
-        totalRows: counts.totalRows,
-        validRows: counts.validRows,
-        skippedRows: counts.skippedRows,
+        totalRowsSeen: counts.totalRowsSeen,
+        importedCount: counts.importedCount,
+        skippedMissingAccountNumber: counts.skippedMissingAccountNumber,
+        skippedInvalidAccountNumber: counts.skippedInvalidAccountNumber,
+        ...(counts.importedCount === 0
+          ? { warning: 'No rows were imported because all rows were missing or invalid.' }
+          : {}),
       },
-      { status: 201 }
+      { status: statusCode }
     );
   } catch (error) {
     console.error('Import failed', error);

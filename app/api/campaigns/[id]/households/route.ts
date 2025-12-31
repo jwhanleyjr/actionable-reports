@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 
+import { getCampaignAccountIds, getCampaignHouseholds, usingMockStorage } from '@/lib/dataStore';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 
 export const dynamic = 'force-dynamic';
@@ -28,6 +29,29 @@ export async function GET(_request: Request, { params }: Params) {
 
   if (!Number.isFinite(campaignId)) {
     return NextResponse.json({ error: 'Invalid campaign id' }, { status: 400 });
+  }
+
+  if (usingMockStorage()) {
+    const accountIds = getCampaignAccountIds(campaignId);
+    const { households, members, constituents } = getCampaignHouseholds(campaignId, accountIds);
+
+    const householdsResponse = households.map((household) => ({
+      householdId: household.householdId,
+      household: household.data,
+      members: members
+        .filter((member) => member.householdId === household.householdId)
+        .map((member) => ({
+          accountId: member.memberAccountId,
+          constituent:
+            constituents.find((constituent) => constituent.accountId === member.memberAccountId)?.data ?? null,
+        })),
+    }));
+
+    return NextResponse.json({
+      campaignId,
+      households: householdsResponse,
+      counts: { households: householdsResponse.length, members: accountIds.length },
+    });
   }
 
   const supabase = getSupabaseAdmin();

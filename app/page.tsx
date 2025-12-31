@@ -1,11 +1,20 @@
 import CampaignDashboard from './components/CampaignDashboard';
 
+import { createCampaign, listCampaigns, usingMockStorage } from '@/lib/dataStore';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 
 export const dynamic = 'force-dynamic';
 
 async function loadCampaigns() {
   try {
+    if (usingMockStorage()) {
+      if (listCampaigns().length === 0) {
+        createCampaign('Sample campaign (mocked)');
+      }
+
+      return { campaigns: listCampaigns(), error: null };
+    }
+
     const supabase = getSupabaseAdmin();
     const { data, error } = await supabase
       .from('campaigns')
