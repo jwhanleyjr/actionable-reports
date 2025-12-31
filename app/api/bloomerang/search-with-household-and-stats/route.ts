@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-import { calculateGivingStats } from '../giving-stats/route';
+import { calculateGivingStats } from '../giving-stats/service';
 import {
   fetchJsonWithModes,
   getApiKey,
