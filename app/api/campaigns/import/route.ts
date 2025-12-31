@@ -13,6 +13,8 @@ type ImportCounts = {
   skippedInvalidAccountNumber: number;
 };
 
+type ParsedRow = { accountId: number; rowNumber: number };
+
 class MissingAccountNumberColumnError extends Error {}
 
 function isAccountHeader(value: unknown): boolean {
@@ -28,7 +30,7 @@ function isAccountHeader(value: unknown): boolean {
   ].includes(normalized);
 }
 
-function parseWorksheet(buffer: ArrayBuffer): { accountIds: number[]; counts: ImportCounts } {
+function parseWorksheet(buffer: ArrayBuffer): { accountRows: ParsedRow[]; counts: ImportCounts } {
   const workbook = XLSX.read(buffer, { type: 'array' });
   const firstSheetName = workbook.SheetNames[0];
 
@@ -50,12 +52,12 @@ function parseWorksheet(buffer: ArrayBuffer): { accountIds: number[]; counts: Im
     throw new MissingAccountNumberColumnError('Account Number column is missing.');
   }
 
-  const accountIds: number[] = [];
+  const accountRows: ParsedRow[] = [];
   let totalRowsSeen = 0;
   let skippedMissingAccountNumber = 0;
   let skippedInvalidAccountNumber = 0;
 
-  for (const row of rows.slice(1)) {
+  for (const [index, row] of rows.slice(1).entries()) {
     totalRowsSeen += 1;
     const cellValue = Array.isArray(row) ? row[accountNumberIndex] : undefined;
     const value = typeof cellValue === 'string' ? cellValue.trim() : cellValue;
@@ -68,17 +70,17 @@ function parseWorksheet(buffer: ArrayBuffer): { accountIds: number[]; counts: Im
     const accountId = Number(value);
 
     if (Number.isFinite(accountId)) {
-      accountIds.push(accountId);
+      accountRows.push({ accountId, rowNumber: index + 2 });
     } else {
       skippedInvalidAccountNumber += 1;
     }
   }
 
   return {
-    accountIds,
+    accountRows,
     counts: {
       totalRowsSeen,
-      importedCount: accountIds.length,
+      importedCount: accountRows.length,
       skippedMissingAccountNumber,
       skippedInvalidAccountNumber,
     },
@@ -113,11 +115,14 @@ export async function POST(request: Request) {
       throw error;
     }
 
-    const { accountIds, counts } = parsed;
+    const { accountRows, counts } = parsed;
     const statusCode = counts.importedCount === 0 ? 200 : 201;
     if (usingMockStorage()) {
       const campaign = createCampaign(`Imported campaign ${new Date().toISOString()}`);
-      addImportRows(campaign.id, accountIds);
+      addImportRows(
+        campaign.id,
+        accountRows.map((row) => row.accountId)
+      );
 
       return NextResponse.json(
         {
@@ -164,10 +169,16 @@ export async function POST(request: Request) {
       );
     }
 
-    if (accountIds.length > 0) {
+    if (accountRows.length > 0) {
       const { error: rowsError } = await supabase
         .from('campaign_import_rows')
-        .insert(accountIds.map((accountId) => ({ campaign_id: campaign.id, account_id: accountId })));
+        .insert(
+          accountRows.map((row) => ({
+            campaign_id: campaign.id,
+            account_id: row.accountId,
+            row_number: row.rowNumber,
+          }))
+        );
 
       if (rowsError) {
         console.error('Failed to store imported rows', rowsError);
