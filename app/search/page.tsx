@@ -378,8 +378,8 @@ function extractConstituentId(data: unknown): number | null {
     'Id',
     'constituentId',
     'ConstituentId',
-    'accountNumber',
-    'AccountNumber',
+    'accountId',
+    'AccountId',
   ]);
 }
 

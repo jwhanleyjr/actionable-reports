@@ -151,7 +151,14 @@ async function searchConstituent(accountNumber: string, apiKey: string) {
   const householdId = pickNumber(firstResult as Record<string, unknown>, ['HouseholdId', 'householdId']);
   const isInHousehold = normalizeBoolean(readValue(firstResult as Record<string, unknown>, 'IsInHousehold')
     ?? readValue(firstResult as Record<string, unknown>, 'isInHousehold'));
-  const constituentId = pickNumber(firstResult as Record<string, unknown>, ['id', 'Id', 'constituentId', 'ConstituentId', 'accountNumber', 'AccountNumber']);
+  const constituentId = pickNumber(firstResult as Record<string, unknown>, [
+    'id',
+    'Id',
+    'constituentId',
+    'ConstituentId',
+    'accountId',
+    'AccountId',
+  ]);
 
   return {
     ok: true as const,
