@@ -1,9 +1,9 @@
-import type { Metadata } from "next";
-import "./globals.css";
+import type { Metadata } from 'next';
+import './globals.css';
 
 export const metadata: Metadata = {
-  title: "Campaign import tool",
-  description: "Upload Bloomerang Excel exports and review campaign results.",
+  title: 'Bloomerang Search Tester',
+  description: 'Quickly test Bloomerang constituent search by account number.',
 };
 
 export default function RootLayout({
