@@ -118,7 +118,7 @@ async function safeReadError(response: Response) {
 }
 
 export async function getConstituent(accountId: number) {
-  return request(`/v2/constituents/${accountId}`);
+  return request(`/v2/constituent/${accountId}`);
 }
 
 export async function getHousehold(householdId: number) {
