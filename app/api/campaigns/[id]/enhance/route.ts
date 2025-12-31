@@ -1,22 +1,15 @@
 import { NextResponse } from 'next/server';
 
-import { getConstituent, getHousehold } from '@/lib/bloomerang';
+import {
+  ConstituentProfile,
+  HouseholdProfile,
+  getConstituent,
+  getHousehold,
+} from '@/lib/bloomerang';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 
 type Params = {
   params: { id?: string };
-};
-
-type ConstituentProfile = {
-  accountId?: number;
-  householdId?: number;
-  [key: string]: unknown;
-};
-
-type HouseholdProfile = {
-  householdId?: number;
-  members?: Array<{ accountId?: number; constituentId?: number }>;
-  [key: string]: unknown;
 };
 
 export async function POST(_request: Request, { params }: Params) {

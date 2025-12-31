@@ -1,5 +1,17 @@
 import 'server-only';
 
+export type ConstituentProfile = {
+  accountId?: number;
+  householdId?: number;
+  [key: string]: unknown;
+};
+
+export type HouseholdProfile = {
+  householdId?: number;
+  members?: Array<{ accountId?: number; constituentId?: number }>;
+  [key: string]: unknown;
+};
+
 const BASE_URL = 'https://api.bloomerang.co';
 const API_KEY = process.env.BLOOMERANG_API_KEY;
 
@@ -63,10 +75,10 @@ async function safeReadError(response: Response) {
   }
 }
 
-export async function getConstituent(accountId: number) {
-  return request(`/v2/constituents/${accountId}`);
+export async function getConstituent(accountId: number): Promise<ConstituentProfile> {
+  return request<ConstituentProfile>(`/v2/constituents/${accountId}`);
 }
 
-export async function getHousehold(householdId: number) {
-  return request(`/v2/households/${householdId}`);
+export async function getHousehold(householdId: number): Promise<HouseholdProfile> {
+  return request<HouseholdProfile>(`/v2/households/${householdId}`);
 }
