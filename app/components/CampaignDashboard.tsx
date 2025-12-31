@@ -1,12 +1,13 @@
 'use client';
 
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { ChangeEvent, FormEvent, useMemo, useState } from 'react';
 
 import styles from '../page.module.css';
 
 type ImportResponse = {
-  campaignId: number;
+  campaign: { id: string; name: string };
   totalRowsSeen: number;
   importedCount: number;
   skippedMissingAccountNumber: number;
@@ -18,7 +19,7 @@ type ImportResponse = {
 type UploadState = 'idle' | 'uploading' | 'success' | 'error';
 
 type Campaign = {
-  id: number;
+  id: string;
   name: string;
   createdAt?: string;
 };
@@ -29,11 +30,13 @@ type Props = {
 };
 
 export default function CampaignDashboard({ initialCampaigns, initialError }: Props) {
+  const router = useRouter();
   const [campaigns, setCampaigns] = useState<Campaign[]>(initialCampaigns);
   const [campaignsLoading, setCampaignsLoading] = useState<boolean>(false);
   const [campaignsError, setCampaignsError] = useState<string | null>(initialError);
   const [showUpload, setShowUpload] = useState<boolean>(false);
   const [file, setFile] = useState<File | null>(null);
+  const [campaignName, setCampaignName] = useState<string>('');
   const [status, setStatus] = useState<UploadState>('idle');
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<ImportResponse | null>(null);
@@ -46,6 +49,12 @@ export default function CampaignDashboard({ initialCampaigns, initialError }: Pr
   const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
     const selectedFile = event.target.files?.[0] ?? null;
     setFile(selectedFile);
+    setError(null);
+    setResult(null);
+  };
+
+  const handleNameChange = (event: ChangeEvent<HTMLInputElement>) => {
+    setCampaignName(event.target.value);
     setError(null);
     setResult(null);
   };
@@ -75,6 +84,12 @@ export default function CampaignDashboard({ initialCampaigns, initialError }: Pr
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
+    if (!campaignName.trim()) {
+      setError('Please enter a campaign name before uploading.');
+      setStatus('error');
+      return;
+    }
+
     if (!file) {
       setError('Please select an .xlsx file before uploading.');
       setStatus('error');
@@ -87,6 +102,7 @@ export default function CampaignDashboard({ initialCampaigns, initialError }: Pr
 
     const formData = new FormData();
     formData.append('file', file);
+    formData.append('name', campaignName.trim());
 
     try {
       const response = await fetch('/api/campaigns/import', {
@@ -105,9 +121,10 @@ export default function CampaignDashboard({ initialCampaigns, initialError }: Pr
       setStatus('success');
       setResult(payload);
       setCampaigns((existing) => [
-        { id: payload.campaignId, name: `Imported campaign #${payload.campaignId}` },
+        { id: payload.campaign.id, name: payload.campaign.name },
         ...existing,
       ]);
+      router.push(`/campaigns/${payload.campaign.id}`);
     } catch (uploadError) {
       console.error('Upload failed', uploadError);
       setStatus('error');
@@ -208,6 +225,20 @@ export default function CampaignDashboard({ initialCampaigns, initialError }: Pr
             </div>
 
             <form className={styles.form} onSubmit={handleSubmit}>
+              <label className={styles.label} htmlFor="campaign-name">
+                Campaign Name
+              </label>
+              <input
+                id="campaign-name"
+                name="name"
+                type="text"
+                placeholder="Recurring Donor Calls Spring 2025"
+                value={campaignName}
+                onChange={handleNameChange}
+                className={styles.input}
+                aria-label="Campaign Name"
+              />
+
               <label className={styles.filePicker}>
                 <input
                   type="file"
@@ -234,7 +265,7 @@ export default function CampaignDashboard({ initialCampaigns, initialError }: Pr
                 <div className={styles.statGroup}>
                   <div>
                     <p className={styles.statLabel}>Campaign</p>
-                    <p className={styles.statValue}>#{result.campaignId}</p>
+                    <p className={styles.statValue}>{result.campaign.name}</p>
                   </div>
                   <div>
                     <p className={styles.statLabel}>Rows processed</p>
@@ -257,7 +288,7 @@ export default function CampaignDashboard({ initialCampaigns, initialError }: Pr
                 {result.warning && <div className={styles.error}>{result.warning}</div>}
 
                 <div className={styles.actions}>
-                  <Link className={styles.link} href={`/campaigns/${result.campaignId}`}>
+                  <Link className={styles.link} href={`/campaigns/${result.campaign.id}`}>
                     View campaign results
                   </Link>
                 </div>

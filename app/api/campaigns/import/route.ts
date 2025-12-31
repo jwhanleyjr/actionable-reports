@@ -92,6 +92,13 @@ export async function POST(request: Request) {
   try {
     const formData = await request.formData();
     const file = formData.get('file');
+    const name = formData.get('name');
+
+    if (typeof name !== 'string' || name.trim().length === 0) {
+      return NextResponse.json({ error: 'Campaign name is required.' }, { status: 400 });
+    }
+
+    const campaignName = name.trim();
 
     if (!(file instanceof File)) {
       return NextResponse.json({ error: 'A .xlsx file is required.' }, { status: 400 });
@@ -119,7 +126,7 @@ export async function POST(request: Request) {
     const { accountRows, counts } = parsed;
     const statusCode = counts.importedCount === 0 ? 200 : 201;
     if (usingMockStorage()) {
-      const campaign = createCampaign(`Imported campaign ${new Date().toISOString()}`);
+      const campaign = createCampaign(campaignName);
       addImportRows(
         campaign.id,
         accountRows.map((row) => row.accountId)
@@ -127,7 +134,7 @@ export async function POST(request: Request) {
 
       return NextResponse.json(
         {
-          campaignId: campaign.id,
+          campaign: { id: campaign.id, name: campaign.name },
           totalRowsSeen: counts.totalRowsSeen,
           importedCount: counts.importedCount,
           skippedMissingAccountNumber: counts.skippedMissingAccountNumber,
@@ -144,8 +151,8 @@ export async function POST(request: Request) {
 
     const { data: campaign, error: campaignError } = await supabase
       .from('campaigns')
-      .insert({ name: `Imported campaign ${new Date().toISOString()}` })
-      .select('id')
+      .insert({ name: campaignName })
+      .select('id, name')
       .single();
 
     if (campaignError) {
@@ -198,7 +205,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json(
       {
-        campaignId: campaign.id,
+        campaign: { id: campaign.id, name: campaign.name },
         totalRowsSeen: counts.totalRowsSeen,
         importedCount: counts.importedCount,
         skippedMissingAccountNumber: counts.skippedMissingAccountNumber,

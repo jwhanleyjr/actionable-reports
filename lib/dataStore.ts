@@ -1,11 +1,13 @@
+import { randomUUID } from 'crypto';
+
 export type CampaignRecord = {
-  id: number;
+  id: string;
   name: string;
   createdAt: string;
 };
 
 export type ImportRowRecord = {
-  campaignId: number;
+  campaignId: string;
   accountId: number;
 };
 
@@ -27,7 +29,7 @@ export type ConstituentRecord = {
 const campaigns: CampaignRecord[] = [];
 const importRows: ImportRowRecord[] = [];
 const campaignHouseholds = new Map<
-  number,
+  string,
   { households: HouseholdRecord[]; members: HouseholdMemberRecord[]; constituents: ConstituentRecord[] }
 >();
 
@@ -39,7 +41,7 @@ export function usingMockStorage(): boolean {
 }
 
 export function createCampaign(name: string): CampaignRecord {
-  const campaign = { id: nextCampaignId++, name, createdAt: new Date().toISOString() };
+  const campaign = { id: randomUUID(), name, createdAt: new Date().toISOString() };
   campaigns.unshift(campaign);
   return campaign;
 }
@@ -48,17 +50,21 @@ export function listCampaigns(): CampaignRecord[] {
   return [...campaigns];
 }
 
-export function addImportRows(campaignId: number, accountIds: number[]): void {
+export function addImportRows(campaignId: string, accountIds: number[]): void {
   for (const accountId of accountIds) {
     importRows.push({ campaignId, accountId });
   }
 }
 
-export function getCampaignAccountIds(campaignId: number): number[] {
+export function getCampaignAccountIds(campaignId: string): number[] {
   return importRows
     .filter((row) => row.campaignId === campaignId)
     .map((row) => row.accountId)
     .filter((value, index, array) => array.indexOf(value) === index);
+}
+
+export function findCampaign(campaignId: string): CampaignRecord | undefined {
+  return campaigns.find((campaign) => campaign.id === campaignId);
 }
 
 function randomPhone(seed: number): string {
@@ -103,7 +109,7 @@ function buildMockCampaignData(accountIds: number[]) {
   return { households, members, constituents };
 }
 
-export function getCampaignHouseholds(campaignId: number, accountIds: number[]) {
+export function getCampaignHouseholds(campaignId: string, accountIds: number[]) {
   if (!campaignHouseholds.has(campaignId)) {
     campaignHouseholds.set(campaignId, buildMockCampaignData(accountIds));
   }

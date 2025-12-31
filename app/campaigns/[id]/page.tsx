@@ -16,7 +16,7 @@ type Household = {
 };
 
 type HouseholdsResponse = {
-  campaignId: number;
+  campaignId: string;
   households: Household[];
   counts?: {
     households: number;
@@ -24,6 +24,11 @@ type HouseholdsResponse = {
   };
   error?: string;
 };
+
+function isUuid(value: string | undefined): value is string {
+  if (!value) return false;
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
 
 export default function CampaignPage({ params }: { params: { id: string } }) {
   const [households, setHouseholds] = useState<Household[]>([]);
@@ -39,6 +44,13 @@ export default function CampaignPage({ params }: { params: { id: string } }) {
       setLoading(true);
       setError(null);
 
+      if (!isUuid(campaignId)) {
+        setError('The campaign id is invalid. Please return to the dashboard and try again.');
+        setHouseholds([]);
+        setLoading(false);
+        return;
+      }
+
       try {
         const response = await fetch(`/api/campaigns/${campaignId}/households`, {
           cache: 'no-store',
@@ -47,7 +59,11 @@ export default function CampaignPage({ params }: { params: { id: string } }) {
         const payload: HouseholdsResponse = await response.json();
 
         if (!response.ok) {
-          setError(payload.error || 'Failed to load households');
+          if (response.status === 404) {
+            setError('We could not find that campaign. Please return to the dashboard and try again.');
+          } else {
+            setError(payload.error || 'Failed to load households');
+          }
           setHouseholds([]);
           return;
         }

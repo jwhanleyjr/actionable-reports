@@ -26,7 +26,7 @@ export async function GET() {
     }
 
     const campaigns = (data || []).map((campaign) => ({
-      id: campaign.id,
+      id: String(campaign.id),
       name: campaign.name || `Campaign #${campaign.id}`,
       createdAt: campaign.created_at ?? undefined,
     }));

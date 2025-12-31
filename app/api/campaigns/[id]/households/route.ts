@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 
-import { getCampaignAccountIds, getCampaignHouseholds, usingMockStorage } from '@/lib/dataStore';
+import { findCampaign, getCampaignAccountIds, getCampaignHouseholds, usingMockStorage } from '@/lib/dataStore';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 
 export const dynamic = 'force-dynamic';
@@ -24,14 +24,25 @@ type ConstituentRecord = {
   data: Record<string, unknown> | null;
 };
 
-export async function GET(_request: Request, { params }: Params) {
-  const campaignId = Number(params?.id);
+function isUuid(value: string | undefined): value is string {
+  if (!value) return false;
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
 
-  if (!Number.isFinite(campaignId)) {
+export async function GET(_request: Request, { params }: Params) {
+  const campaignId = params?.id;
+
+  if (!isUuid(campaignId)) {
     return NextResponse.json({ error: 'Invalid campaign id' }, { status: 400 });
   }
 
   if (usingMockStorage()) {
+    const campaign = findCampaign(campaignId);
+
+    if (!campaign) {
+      return NextResponse.json({ error: 'Campaign not found' }, { status: 404 });
+    }
+
     const accountIds = getCampaignAccountIds(campaignId);
     const { households, members, constituents } = getCampaignHouseholds(campaignId, accountIds);
 
@@ -55,6 +66,21 @@ export async function GET(_request: Request, { params }: Params) {
   }
 
   const supabase = getSupabaseAdmin();
+
+  const { data: campaign, error: campaignError } = await supabase
+    .from('campaigns')
+    .select('id')
+    .eq('id', campaignId)
+    .maybeSingle();
+
+  if (campaignError) {
+    console.error('Failed to check campaign existence', campaignError);
+    return NextResponse.json({ error: 'Unable to load campaign.' }, { status: 500 });
+  }
+
+  if (!campaign) {
+    return NextResponse.json({ error: 'Campaign not found' }, { status: 404 });
+  }
 
   const { data: importRows, error: importError } = await supabase
     .from('campaign_import_rows')
