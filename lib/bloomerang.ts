@@ -129,8 +129,14 @@ export async function getHousehold(householdId: number) {
 
 type ConstituentSearchResult = {
   accountId?: number;
+  accountID?: number;
+  accountid?: number;
+  accountNumber?: number | string;
   constituentId?: number;
+  constituentID?: number;
+  constituentid?: number;
   id?: number;
+  [key: string]: unknown;
 };
 
 type ConstituentSearchResponse = {
@@ -181,10 +187,7 @@ export async function findConstituentIdByAccountNumber(accountNumber: string): P
   const response = (await request(searchUrl)) as ConstituentSearchResponse;
   const [firstResult] = extractSearchResults(response);
 
-  const candidate =
-    toNumber(firstResult?.constituentId) ??
-    toNumber(firstResult?.accountId) ??
-    toNumber(firstResult?.id);
+  const candidate = extractConstituentId(firstResult);
 
   const constituentId = Number.isFinite(candidate) ? (candidate as number) : null;
 
@@ -193,6 +196,37 @@ export async function findConstituentIdByAccountNumber(accountNumber: string): P
   }
 
   return { constituentId, url: searchUrl };
+}
+
+function extractConstituentId(result: ConstituentSearchResult | undefined): number | null {
+  if (!result || typeof result !== 'object') {
+    return null;
+  }
+
+  const directCandidate =
+    toNumber((result as ConstituentSearchResult).constituentId) ??
+    toNumber((result as ConstituentSearchResult).constituentID) ??
+    toNumber((result as ConstituentSearchResult).constituentid) ??
+    toNumber((result as ConstituentSearchResult).accountId) ??
+    toNumber((result as ConstituentSearchResult).accountID) ??
+    toNumber((result as ConstituentSearchResult).accountid) ??
+    toNumber((result as ConstituentSearchResult).id);
+
+  if (directCandidate !== null) {
+    return directCandidate;
+  }
+
+  const entries = Object.entries(result);
+  for (const [key, value] of entries) {
+    if (typeof key === 'string' && /constituent.*id/i.test(key)) {
+      const numeric = toNumber(value);
+      if (numeric !== null) {
+        return numeric;
+      }
+    }
+  }
+
+  return null;
 }
 
 export { BloomerangRequestError };
