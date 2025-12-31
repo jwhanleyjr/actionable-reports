@@ -6,8 +6,6 @@ import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 
 export const dynamic = 'force-dynamic';
 
-type ParsedRow = Record<string, unknown>;
-
 type ImportCounts = {
   totalRowsSeen: number;
   importedCount: number;
@@ -39,7 +37,7 @@ function parseWorksheet(buffer: ArrayBuffer): { accountIds: number[]; counts: Im
   }
 
   const worksheet = workbook.Sheets[firstSheetName];
-  const rows = XLSX.utils.sheet_to_json<ParsedRow[]>(worksheet, {
+  const rows: unknown[][] = XLSX.utils.sheet_to_json<unknown[]>(worksheet, {
     header: 1,
     defval: null,
     blankrows: true,
