@@ -58,46 +58,57 @@ export default function SearchPage() {
 
   return (
     <main className={styles.page}>
-      <div className={styles.panel}>
-        <header className={styles.header}>
-          <p className={styles.kicker}>Bloomerang Calls</p>
-          <h1 className={styles.title}>Bloomerang Search Tester</h1>
-          <p className={styles.subtitle}>
-            Enter an account number to query Bloomerang and review the raw search response.
-          </p>
-        </header>
-
-        <form className={styles.form} onSubmit={handleSubmit}>
-          <label className={styles.label} htmlFor="accountNumber">
-            Account Number
-          </label>
-          <input
-            id="accountNumber"
-            name="accountNumber"
-            type="text"
-            autoComplete="off"
-            value={accountNumber}
-            onChange={(event) => setAccountNumber(event.target.value)}
-            placeholder="2872456"
-            className={styles.input}
-          />
-
-          <button type="submit" className={styles.button} disabled={loading}>
-            {loading ? 'Searching…' : 'Search'}
+      <div className={styles.shell}>
+        <div className={styles.navbar}>
+          <span className={styles.brand}>Bloomerang Calls</span>
+          <button type="button" className={styles.navButton}>
+            New Call Campaign
           </button>
-        </form>
+        </div>
 
-        {error && <div className={styles.error}>{error}</div>}
+        <div className={styles.card}>
+          <header className={styles.header}>
+            <p className={styles.kicker}>Campaign Workspace</p>
+            <h1 className={styles.title}>Bloomerang Search Tester</h1>
+            <p className={styles.subtitle}>
+              Enter an account number to query Bloomerang and review the raw search response.
+            </p>
+          </header>
 
-        <div className={styles.output}>
-          <p className={styles.outputLabel}>Response</p>
-          {loading ? (
-            <p className={styles.muted}>Loading…</p>
-          ) : result ? (
-            <pre className={styles.pre}>{JSON.stringify(result, null, 2)}</pre>
-          ) : (
-            <p className={styles.muted}>Submit a search to see results here.</p>
-          )}
+          <form className={styles.form} onSubmit={handleSubmit}>
+            <div className={styles.field}>
+              <label className={styles.label} htmlFor="accountNumber">
+                Account Number
+              </label>
+              <input
+                id="accountNumber"
+                name="accountNumber"
+                type="text"
+                autoComplete="off"
+                value={accountNumber}
+                onChange={(event) => setAccountNumber(event.target.value)}
+                placeholder="2872456"
+                className={styles.input}
+              />
+            </div>
+
+            <button type="submit" className={styles.button} disabled={loading}>
+              {loading ? 'Searching…' : 'Search'}
+            </button>
+          </form>
+
+          {error && <div className={styles.error}>{error}</div>}
+
+          <div className={styles.output}>
+            <p className={styles.outputLabel}>Response</p>
+            {loading ? (
+              <p className={styles.muted}>Loading…</p>
+            ) : result ? (
+              <pre className={styles.pre}>{JSON.stringify(result, null, 2)}</pre>
+            ) : (
+              <p className={styles.muted}>Submit a search to see results here.</p>
+            )}
+          </div>
         </div>
       </div>
     </main>
