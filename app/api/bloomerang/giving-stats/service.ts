@@ -236,6 +236,26 @@ function getTransactionAmount(transaction: Transaction) {
     'Amount.Amount',
   ]);
 
+  if (typeof amount === 'number' && !Number.isNaN(amount)) {
+    return amount;
+  }
+
+  const designations = readValue(transaction, 'Designations');
+
+  if (Array.isArray(designations) && designations.length > 0) {
+    const designationAmount = pickNumber(designations[0] as Transaction, [
+      'Amount',
+      'amount',
+      'AmountValue',
+      'amountValue',
+      'Amount.Amount',
+    ]);
+
+    if (typeof designationAmount === 'number' && !Number.isNaN(designationAmount)) {
+      return designationAmount;
+    }
+  }
+
   return amount ?? 0;
 }
 
@@ -250,7 +270,22 @@ function getTransactionType(transaction: Transaction) {
     ?? readValue(transaction, 'TransactionType')
     ?? readValue(transaction, 'transactionType');
 
-  return typeof typeValue === 'string' && typeValue.trim() ? typeValue : null;
+  if (typeof typeValue === 'string' && typeValue.trim()) {
+    return typeValue;
+  }
+
+  const designations = readValue(transaction, 'Designations');
+
+  if (Array.isArray(designations) && designations.length > 0) {
+    const designationType = readValue(designations[0] as Transaction, 'Type')
+      ?? readValue(designations[0] as Transaction, 'type');
+
+    if (typeof designationType === 'string' && designationType.trim()) {
+      return designationType;
+    }
+  }
+
+  return null;
 }
 
 function getTransactionId(transaction: Transaction) {
