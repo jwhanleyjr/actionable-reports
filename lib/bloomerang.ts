@@ -59,6 +59,7 @@ async function request<T>(path: string, options: RequestInit = {}, retries = 3):
   const headers = new Headers(options.headers);
   headers.set('X-API-KEY', getApiKey());
   headers.set('Accept', 'application/json');
+  const requestHeaderNames = Array.from(headers.keys()).filter((name) => name.toLowerCase() !== 'x-api-key');
 
   try {
     const response = await fetch(url, {
@@ -73,11 +74,13 @@ async function request<T>(path: string, options: RequestInit = {}, retries = 3):
       }
       const contentType = response.headers.get('content-type');
       const body = await safeReadError(response);
-      const snippet = body.slice(0, 300);
+      const snippet = body.slice(0, 200);
       console.error('Bloomerang request failed', {
         url,
         status: response.status,
         contentType,
+        requestHeaders: requestHeaderNames,
+        bodySnippet: snippet,
       });
       throw new BloomerangRequestError(
         `Bloomerang request failed (${response.status}) for ${url}: ${snippet}`,
