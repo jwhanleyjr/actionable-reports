@@ -262,6 +262,9 @@ function extractHouseholdId(data: unknown): number | null {
 
 function extractHouseholdName(data: unknown): string | null {
   const householdName = pickString((data as Record<string, unknown>) ?? {}, [
+    'RecognitionName',
+    'recognitionName',
+    'FullName',
     'name',
     'Name',
     'householdName',
@@ -278,6 +281,9 @@ function extractHouseholdName(data: unknown): string | null {
 
   if (firstResult && typeof firstResult === 'object') {
     const nestedName = pickString(firstResult as Record<string, unknown>, [
+      'RecognitionName',
+      'recognitionName',
+      'FullName',
       'name',
       'Name',
       'householdName',
