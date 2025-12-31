@@ -85,14 +85,14 @@ export async function POST(_request: Request, { params }: Params) {
 
   try {
     for (const accountNumber of accountNumbers) {
-      const accountId = await findConstituentIdByAccountNumber(accountNumber);
+      const { constituentId, url } = await findConstituentIdByAccountNumber(accountNumber);
 
-      if (!accountId) {
-        console.warn(`No constituent found for account number ${accountNumber}`);
+      if (!constituentId) {
+        console.warn(`No constituent found for account number ${accountNumber}; search URL: ${url}`);
         continue;
       }
 
-      await processConstituent(accountId, constituentCache, householdCache, householdMemberCache);
+      await processConstituent(constituentId, constituentCache, householdCache, householdMemberCache);
     }
   } catch (error) {
     console.error('Enhancement failed', error);

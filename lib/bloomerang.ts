@@ -154,14 +154,18 @@ function extractSearchResults(response: ConstituentSearchResponse): ConstituentS
   return [];
 }
 
-export async function findConstituentIdByAccountNumber(accountNumber: string): Promise<number | null> {
+export async function findConstituentIdByAccountNumber(accountNumber: string): Promise<{
+  constituentId: number | null;
+  url: string;
+}> {
   const normalizedBase = getBaseUrl().endsWith('/') ? getBaseUrl() : `${getBaseUrl()}/`;
   const url = new URL('/constituents/search', normalizedBase);
   url.searchParams.set('skip', '0');
   url.searchParams.set('take', '1');
   url.searchParams.set('search', accountNumber);
 
-  const response = (await request(url.toString())) as ConstituentSearchResponse;
+  const searchUrl = url.toString();
+  const response = (await request(searchUrl)) as ConstituentSearchResponse;
   const [firstResult] = extractSearchResults(response);
 
   const candidate =
@@ -173,7 +177,9 @@ export async function findConstituentIdByAccountNumber(accountNumber: string): P
           ? firstResult.id
           : null;
 
-  return Number.isFinite(candidate) ? (candidate as number) : null;
+  const constituentId = Number.isFinite(candidate) ? (candidate as number) : null;
+
+  return { constituentId, url: searchUrl };
 }
 
 export { BloomerangRequestError };
