@@ -27,6 +27,7 @@ export default function SearchPage() {
   const [result, setResult] = useState<SearchResult | null>(null);
   const [householdResult, setHouseholdResult] = useState<SearchResult | null>(null);
   const [householdError, setHouseholdError] = useState<string | null>(null);
+  const [memberError, setMemberError] = useState<string | null>(null);
   const [members, setMembers] = useState<HouseholdMember[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -37,6 +38,7 @@ export default function SearchPage() {
     setResult(null);
     setHouseholdResult(null);
     setHouseholdError(null);
+    setMemberError(null);
     setMembers([]);
 
     const trimmed = accountNumber.trim();
@@ -88,7 +90,24 @@ export default function SearchPage() {
         return;
       }
 
-      setMembers(extractMembers(householdPayload.data));
+      const memberIds = extractMemberIds(householdPayload.data);
+
+      if (!memberIds.length) {
+        setMembers([]);
+        return;
+      }
+
+      const { members: fetchedMembers, failedIds } = await fetchMembersById(memberIds);
+
+      setMembers(fetchedMembers);
+
+      if (failedIds.length === memberIds.length) {
+        setMemberError('Failed to load household members.');
+      } else if (failedIds.length > 0) {
+        setMemberError(`Some household members failed to load: ${failedIds.join(', ')}.`);
+      } else {
+        setMemberError(null);
+      }
     } catch (err) {
       console.error('Search request failed', err);
       setError('Unable to complete the search request.');
@@ -184,6 +203,8 @@ export default function SearchPage() {
                     </li>
                   ))}
                 </ul>
+              ) : memberError ? (
+                <p className={styles.muted}>{memberError}</p>
               ) : householdResult ? (
                 <p className={styles.muted}>No household members returned.</p>
               ) : (
@@ -207,6 +228,40 @@ function extractHouseholdId(data: unknown): number | null {
 
   const id = typeof value === 'number' ? value : Number(value);
   return Number.isFinite(id) ? id : null;
+}
+
+async function fetchMembersById(memberIds: number[]): Promise<{ members: HouseholdMember[]; failedIds: number[] }> {
+  const lookups = await Promise.all(memberIds.map(async (memberId) => {
+    try {
+      const response = await fetch(`/api/bloomerang/constituent/${memberId}`);
+      const payload = (await response.json()) as SearchResult;
+
+      if (!response.ok || !payload.ok) {
+        return { memberId, member: null as HouseholdMember | null };
+      }
+
+      const member = buildMemberFromConstituent(payload.data, memberId);
+
+      return { memberId, member };
+    } catch (error) {
+      console.error('Member lookup failed', error);
+      return { memberId, member: null as HouseholdMember | null };
+    }
+  }));
+
+  const members = lookups.reduce<HouseholdMember[]>((acc, lookup) => {
+    if (lookup.member) {
+      acc.push(lookup.member);
+    }
+
+    return acc;
+  }, []);
+
+  const failedIds = lookups
+    .filter((lookup) => !lookup.member)
+    .map((lookup) => lookup.memberId);
+
+  return { members, failedIds };
 }
 
 function extractMembers(data: unknown): HouseholdMember[] {
@@ -237,6 +292,35 @@ function extractMembers(data: unknown): HouseholdMember[] {
 
     return acc;
   }, []);
+}
+
+function extractMemberIds(data: unknown): number[] {
+  const ids = new Set<number>();
+  const candidate = data && typeof data === 'object' ? data as Record<string, unknown> : null;
+  const firstResult = Array.isArray((candidate as { Results?: unknown[] } | null)?.Results)
+    ? (candidate as { Results: unknown[] }).Results[0]
+    : null;
+
+  const sources = [candidate, firstResult].filter((value): value is Record<string, unknown> => !!value);
+
+  for (const source of sources) {
+    const rawIds = readValue(source, 'MemberIds') ?? readValue(source, 'memberIds');
+
+    if (Array.isArray(rawIds)) {
+      rawIds.forEach((id) => {
+        const numeric = typeof id === 'number' ? id : Number(id);
+        if (Number.isFinite(numeric)) {
+          ids.add(numeric);
+        }
+      });
+    }
+  }
+
+  if (!ids.size) {
+    return extractMembers(data).map((member) => member.id);
+  }
+
+  return Array.from(ids.values());
 }
 
 function getMemberArray(data: unknown): Array<Record<string, unknown>> {
@@ -285,6 +369,41 @@ function buildMemberName(member: Record<string, unknown>, fallbackId: number) {
   const joined = `${first} ${last}`.trim();
 
   return joined || `Constituent ${fallbackId}`;
+}
+
+function buildMemberFromConstituent(data: unknown, fallbackId: number): HouseholdMember | null {
+  if (!data || typeof data !== 'object') {
+    return null;
+  }
+
+  const record = data as Record<string, unknown>;
+  const id = pickNumber(record, ['accountId', 'AccountId', 'constituentId', 'ConstituentId', 'id', 'Id']);
+  const resolvedId = Number.isFinite(id) ? id : fallbackId;
+
+  if (!Number.isFinite(resolvedId)) {
+    return null;
+  }
+
+  const name = buildMemberName(record, resolvedId as number);
+  const phone = pickString(record, [
+    'primaryPhone.number',
+    'primaryPhone.Number',
+    'PrimaryPhone.number',
+    'PrimaryPhone.Number',
+  ]);
+  const email = pickString(record, [
+    'primaryEmail.value',
+    'primaryEmail.Value',
+    'PrimaryEmail.value',
+    'PrimaryEmail.Value',
+  ]);
+
+  return {
+    id: resolvedId as number,
+    name,
+    phone,
+    email,
+  };
 }
 
 function readValue(source: Record<string, unknown>, path: string): unknown {
