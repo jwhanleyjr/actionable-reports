@@ -212,31 +212,31 @@ function extractHouseholdId(data: unknown): number | null {
 function extractMembers(data: unknown): HouseholdMember[] {
   const members = getMemberArray(data);
 
-  return members
-    .map((member) => {
-      const id = pickNumber(member, ['accountId', 'AccountId', 'constituentId', 'ConstituentId']);
+  return members.reduce<HouseholdMember[]>((acc, member) => {
+    const id = pickNumber(member, ['accountId', 'AccountId', 'constituentId', 'ConstituentId']);
 
-      if (!Number.isFinite(id)) {
-        return null;
-      }
+    if (!Number.isFinite(id)) {
+      return acc;
+    }
 
-      const name = buildMemberName(member, id as number);
-      const phone = pickString(member, [
-        'PrimaryPhone.Number',
-        'primaryPhone.number',
-        'primaryPhone.Number',
-        'PrimaryPhone.number',
-      ]);
-      const email = pickString(member, [
-        'PrimaryEmail.Value',
-        'primaryEmail.value',
-        'primaryEmail.Value',
-        'PrimaryEmail.value',
-      ]);
+    const name = buildMemberName(member, id as number);
+    const phone = pickString(member, [
+      'PrimaryPhone.Number',
+      'primaryPhone.number',
+      'primaryPhone.Number',
+      'PrimaryPhone.number',
+    ]);
+    const email = pickString(member, [
+      'PrimaryEmail.Value',
+      'primaryEmail.value',
+      'primaryEmail.Value',
+      'PrimaryEmail.value',
+    ]);
 
-      return { id: id as number, name, phone, email };
-    })
-    .filter((member): member is HouseholdMember => Boolean(member));
+    acc.push({ id: id as number, name, phone, email });
+
+    return acc;
+  }, []);
 }
 
 function getMemberArray(data: unknown): Array<Record<string, unknown>> {
