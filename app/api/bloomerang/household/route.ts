@@ -49,7 +49,7 @@ export async function POST(request: NextRequest) {
     }, { status: 500 });
   }
 
-  const url = new URL(`https://api.bloomerang.co/v2/households/${householdId}`);
+  const url = new URL(`https://api.bloomerang.co/v2/household/${householdId}`);
 
   const modes: HeaderMode[] = ['both', 'x-only', 'auth-only'];
 
