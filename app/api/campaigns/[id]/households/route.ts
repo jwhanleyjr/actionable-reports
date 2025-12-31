@@ -9,19 +9,15 @@ type Params = {
   params: { id?: string };
 };
 
-type HouseholdRecord = {
+type CampaignHouseholdRecord = {
   household_id: number;
-  data: Record<string, unknown> | null;
+  household_snapshot: Record<string, unknown> | null;
 };
 
-type HouseholdMemberRecord = {
+type CampaignMemberRecord = {
   household_id: number;
-  member_account_id: number;
-};
-
-type ConstituentRecord = {
-  account_id: number;
-  data: Record<string, unknown> | null;
+  constituent_id: number;
+  member_snapshot: Record<string, unknown> | null;
 };
 
 function isUuid(value: string | undefined): value is string {
@@ -47,21 +43,20 @@ export async function GET(_request: Request, { params }: Params) {
     const { households, members, constituents } = getCampaignHouseholds(campaignId, accountIds);
 
     const householdsResponse = households.map((household) => ({
-      householdId: household.householdId,
-      household: household.data,
+      household_id: household.householdId,
+      household_snapshot: household.data,
       members: members
         .filter((member) => member.householdId === household.householdId)
         .map((member) => ({
-          accountId: member.memberAccountId,
-          constituent:
+          constituent_id: member.memberAccountId,
+          member_snapshot:
             constituents.find((constituent) => constituent.accountId === member.memberAccountId)?.data ?? null,
         })),
     }));
 
     return NextResponse.json({
-      campaignId,
+      campaign_id: campaignId,
       households: householdsResponse,
-      counts: { households: householdsResponse.length, members: accountIds.length },
     });
   }
 
@@ -91,143 +86,65 @@ export async function GET(_request: Request, { params }: Params) {
       return NextResponse.json({ error: 'Campaign not found' }, { status: 404 });
     }
 
-    const { data: importRows, error: importError } = await supabase
-      .from('campaign_import_rows')
-      .select('account_id')
-      .eq('campaign_id', campaignId);
-
-    if (importError) {
-      console.error('Households query failed', importError);
-      return NextResponse.json(
-        {
-          error: importError.message,
-          code: importError.code,
-          details: importError.details,
-          hint: importError.hint,
-        },
-        { status: 500 },
-      );
-    }
-
-    const accountIds = Array.from(
-      new Set((importRows ?? []).map((row) => row.account_id).filter((value) => typeof value === 'number')),
-    );
-
-    if (accountIds.length === 0) {
-      return NextResponse.json({ campaignId, households: [], message: 'No households found for this campaign.' });
-    }
-
-    const { data: memberRows, error: memberError } = await supabase
-      .from('household_members')
-      .select('household_id,member_account_id')
-      .in('member_account_id', accountIds);
-
-    if (memberError) {
-      console.error('Households query failed', memberError);
-      return NextResponse.json(
-        {
-          error: memberError.message,
-          code: memberError.code,
-          details: memberError.details,
-          hint: memberError.hint,
-        },
-        { status: 500 },
-      );
-    }
-
-    const householdIds = Array.from(
-      new Set((memberRows ?? []).map((row) => row.household_id).filter((value) => typeof value === 'number')),
-    );
-
-    if (householdIds.length === 0) {
-      return NextResponse.json({ campaignId, households: [], message: 'No households found for this campaign.' });
-    }
-
-    const memberAccountIds = Array.from(
-      new Set((memberRows ?? []).map((row) => row.member_account_id).filter((value) => typeof value === 'number')),
-    );
-
-    if (memberAccountIds.length === 0) {
-      return NextResponse.json({ campaignId, households: [], message: 'No households found for this campaign.' });
-    }
-
-    const [householdsResult, constituentsResult] = await Promise.all([
+    const [{ data: households, error: householdsError }, { data: members, error: membersError }] = await Promise.all([
       supabase
-        .from('households')
-        .select('household_id,data')
-        .in('household_id', householdIds),
+        .from('campaign_households')
+        .select('household_id,household_snapshot')
+        .eq('campaign_id', campaignId),
       supabase
-        .from('constituents')
-        .select('account_id,data')
-        .in('account_id', memberAccountIds),
+        .from('campaign_members')
+        .select('household_id,constituent_id,member_snapshot')
+        .eq('campaign_id', campaignId),
     ]);
 
-    if (householdsResult.error) {
-      console.error('Households query failed', householdsResult.error);
+    if (householdsError) {
+      console.error('Households query failed', householdsError);
       return NextResponse.json(
         {
-          error: householdsResult.error.message,
-          code: householdsResult.error.code,
-          details: householdsResult.error.details,
-          hint: householdsResult.error.hint,
+          error: householdsError.message,
+          code: householdsError.code,
+          details: householdsError.details,
+          hint: householdsError.hint,
         },
         { status: 500 },
       );
     }
 
-    if (constituentsResult.error) {
-      console.error('Households query failed', constituentsResult.error);
+    if (membersError) {
+      console.error('Households query failed', membersError);
       return NextResponse.json(
         {
-          error: constituentsResult.error.message,
-          code: constituentsResult.error.code,
-          details: constituentsResult.error.details,
-          hint: constituentsResult.error.hint,
+          error: membersError.message,
+          code: membersError.code,
+          details: membersError.details,
+          hint: membersError.hint,
         },
         { status: 500 },
       );
     }
 
-    const householdsById = new Map<number, HouseholdRecord>();
-    for (const household of householdsResult.data ?? []) {
-      householdsById.set(household.household_id, household);
-    }
+    const householdsResponse = (households ?? []).map((household: CampaignHouseholdRecord) => ({
+      household_id: household.household_id,
+      household_snapshot: household.household_snapshot,
+      members: (members ?? [])
+        .filter((member): member is CampaignMemberRecord => member.household_id === household.household_id)
+        .map((member) => ({
+          constituent_id: member.constituent_id,
+          member_snapshot: member.member_snapshot,
+        })),
+    }));
 
-    const constituentsById = new Map<number, ConstituentRecord>();
-    for (const constituent of constituentsResult.data ?? []) {
-      constituentsById.set(constituent.account_id, constituent);
-    }
-
-    const households = householdIds.map((householdId) => {
-      const household = householdsById.get(householdId) ?? null;
-      const members = (memberRows ?? [])
-        .filter((memberRow): memberRow is HouseholdMemberRecord => memberRow.household_id === householdId)
-        .map((memberRow) => {
-          const constituent = constituentsById.get(memberRow.member_account_id) ?? null;
-          return {
-            accountId: memberRow.member_account_id,
-            constituent: constituent?.data ?? null,
-          };
-        });
-
-      return {
-        householdId,
-        household: household?.data ?? null,
-        members,
-      };
-    });
-
-    if (households.length === 0) {
-      return NextResponse.json({ campaignId, households: [], message: 'No households found for this campaign.' });
+    if (householdsResponse.length === 0) {
+      return NextResponse.json({
+        campaign_id: campaignId,
+        households: [],
+        message: 'No households found for this campaign.',
+      });
     }
 
     return NextResponse.json({
-      campaignId,
-      households,
-      counts: {
-        households: households.length,
-        members: memberAccountIds.length,
-      },
+      campaign_id: campaignId,
+      households: householdsResponse,
     });
   } catch (error) {
     console.error('Unexpected error loading households', error);
