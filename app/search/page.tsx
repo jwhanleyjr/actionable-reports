@@ -268,7 +268,28 @@ function extractHouseholdName(data: unknown): string | null {
     'HouseholdName',
   ]);
 
-  return householdName ?? null;
+  if (householdName) {
+    return householdName;
+  }
+
+  const firstResult = Array.isArray((data as { Results?: unknown[] })?.Results)
+    ? (data as { Results: unknown[] }).Results[0]
+    : null;
+
+  if (firstResult && typeof firstResult === 'object') {
+    const nestedName = pickString(firstResult as Record<string, unknown>, [
+      'name',
+      'Name',
+      'householdName',
+      'HouseholdName',
+    ]);
+
+    if (nestedName) {
+      return nestedName;
+    }
+  }
+
+  return null;
 }
 
 function extractIsInHousehold(data: unknown): boolean | null {
@@ -366,14 +387,32 @@ function extractMembers(data: unknown): HouseholdMember[] {
 }
 
 function getMemberArray(data: unknown): Array<Record<string, unknown>> {
-  const candidate = (data as { members?: unknown; Members?: unknown }) ?? {};
-  const collection = Array.isArray(candidate.members)
+  const candidate = (data as { members?: unknown; Members?: unknown; Results?: unknown[] }) ?? {};
+  const fromRoot = Array.isArray(candidate.members)
     ? candidate.members
     : Array.isArray(candidate.Members)
       ? candidate.Members
-      : [];
+      : null;
 
-  return collection.filter((value): value is Record<string, unknown> => !!value && typeof value === 'object');
+  if (fromRoot) {
+    return fromRoot.filter((value): value is Record<string, unknown> => !!value && typeof value === 'object');
+  }
+
+  const firstResult = Array.isArray(candidate.Results)
+    ? candidate.Results[0]
+    : null;
+
+  if (firstResult && typeof firstResult === 'object') {
+    const nested = Array.isArray((firstResult as { members?: unknown; Members?: unknown }).members)
+      ? (firstResult as { members: unknown[] }).members
+      : Array.isArray((firstResult as { Members?: unknown }).Members)
+        ? (firstResult as { Members: unknown[] }).Members
+        : [];
+
+    return nested.filter((value): value is Record<string, unknown> => !!value && typeof value === 'object');
+  }
+
+  return [];
 }
 
 function pickNumber(source: Record<string, unknown>, keys: string[]): number | null {
