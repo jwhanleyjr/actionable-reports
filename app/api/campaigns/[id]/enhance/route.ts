@@ -121,7 +121,7 @@ async function processConstituent(
     return;
   }
 
-  const constituent = await getConstituent(accountId);
+  const constituent = (await getConstituent(accountId)) as ConstituentProfile;
   constituentCache.set(accountId, constituent);
 
   const householdId = extractHouseholdId(constituent);
@@ -133,7 +133,7 @@ async function processConstituent(
     return;
   }
 
-  const household = await getHousehold(householdId);
+  const household = (await getHousehold(householdId)) as HouseholdProfile;
   householdCache.set(householdId, household);
   addHouseholdMember(householdId, accountId, householdMemberCache);
 
