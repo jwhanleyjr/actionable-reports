@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 
-import { supabaseAdmin } from '@/lib/supabaseAdmin';
+import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
+
+export const dynamic = 'force-dynamic';
 
 type Params = {
   params: { id?: string };
@@ -28,7 +30,9 @@ export async function GET(_request: Request, { params }: Params) {
     return NextResponse.json({ error: 'Invalid campaign id' }, { status: 400 });
   }
 
-  const { data: importRows, error: importError } = await supabaseAdmin
+  const supabase = getSupabaseAdmin();
+
+  const { data: importRows, error: importError } = await supabase
     .from('campaign_import_rows')
     .select('account_id')
     .eq('campaign_id', campaignId);
@@ -45,7 +49,7 @@ export async function GET(_request: Request, { params }: Params) {
     return NextResponse.json({ campaignId, households: [] });
   }
 
-  const { data: memberRows, error: memberError } = await supabaseAdmin
+  const { data: memberRows, error: memberError } = await supabase
     .from('household_members')
     .select('household_id,member_account_id')
     .in('member_account_id', accountIds);
@@ -71,11 +75,11 @@ export async function GET(_request: Request, { params }: Params) {
   }
 
   const [householdsResult, constituentsResult] = await Promise.all([
-    supabaseAdmin
+    supabase
       .from('households')
       .select('household_id,data')
       .in('household_id', householdIds),
-    supabaseAdmin
+    supabase
       .from('constituents')
       .select('account_id,data')
       .in('account_id', memberAccountIds),
