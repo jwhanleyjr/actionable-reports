@@ -216,7 +216,7 @@ function buildRecommendedOpeningLine(inputs: SummaryInputs, provided?: string | 
 
   if (inputs.lastMeaningful) {
     const date = formatReadableDate(inputs.lastMeaningful.createdDate || inputs.lastMeaningful.date);
-    const channel = inputs.lastMeaningful.channel?.toLowerCase?.() || 'recent conversation';
+    const channel = humanizeChannel(inputs.lastMeaningful.channel) || 'recent conversation';
     const interest = extractInterestSnippet(inputs.lastMeaningful.noteText, inputs.lastMeaningful.subject)
       || (latestNote ? extractInterestSnippet(latestNote.note) : null)
       || 'your recent updates';
@@ -230,7 +230,33 @@ function buildRecommendedOpeningLine(inputs: SummaryInputs, provided?: string | 
     return `Thanks for sharing on ${date} about ${interest}. I’d love to catch up and hear how things are going.`;
   }
 
-  return 'Looking forward to reconnecting and hearing how you have been lately.';
+  return 'Looking forward to reconnecting and hearing how you have been involved with us recently.';
+}
+
+function humanizeChannel(channel?: string | null) {
+  if (!channel) {
+    return null;
+  }
+
+  const normalized = channel.toLowerCase();
+
+  if (normalized.includes('phone') || normalized.includes('call')) {
+    return 'phone call';
+  }
+
+  if (normalized.includes('text')) {
+    return 'text exchange';
+  }
+
+  if (normalized.includes('email')) {
+    return 'email conversation';
+  }
+
+  if (normalized.includes('inperson') || normalized.includes('in person')) {
+    return 'in-person visit';
+  }
+
+  return channel.toLowerCase();
 }
 
 async function summarizeWithOpenAI(inputs: SummaryInputs): Promise<
@@ -258,7 +284,7 @@ async function summarizeWithOpenAI(inputs: SummaryInputs): Promise<
     'You are assisting a fundraiser preparing for personal donor calls.',
     'Output JSON with: { "keyPoints": [...], "recentTimeline": [...], "lastMeaningfulInteraction": { "date": "...", "channel": "...", "summary": "..." }, "suggestedNextSteps": [...], "recommendedOpeningLine": "..." }.',
     'keyPoints: 5-8 concise bullets. recentTimeline: 3-8 bullets, most recent first, and include date + channel when from interactions. suggestedNextSteps: 1-3 actionable bullets for a phone call.',
-    'recommendedOpeningLine: 1-2 sentences, natural phone-call opener, reference the most recent meaningful personal interaction (Phone/Text/Email/InPerson) if present, and mention a concrete interest/preference from notes or interactions when available. No donation ask. If no meaningful interaction, anchor to the most recent note or overall relationship context without asking for money.',
+    'recommendedOpeningLine: 1-2 sentences, natural phone-call opener. Reference the most recent meaningful personal interaction (Phone/Text/Email/InPerson) if present and nod to a concrete interest/preference mentioned in notes or interactions (e.g., building project, tile choice). Avoid donation asks. If no meaningful interaction exists, ground the opener in the most recent note or their relationship with the organization—still no money ask.',
     'Emphasize interactions for recency and call prep; include dates and channels for timeline bullets when based on interactions.',
     'Keep tone concise, donor-call friendly, and actionable.',
     'Household interactions to summarize:',
