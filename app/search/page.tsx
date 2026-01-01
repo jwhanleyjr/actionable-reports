@@ -5,6 +5,8 @@ import { FormEvent, useEffect, useState } from 'react';
 import { getMemberActions, type MemberActionKey } from '../../lib/memberActions';
 import { MemberActionIconButton } from './MemberActionIconButton';
 import { MemberActionModalShell } from './MemberActionModalShell';
+import { MemberTasks } from './MemberTasks';
+import { BloomerangTask } from '../../types/bloomerang';
 import styles from './styles.module.css';
 
 type GivingStats = {
@@ -20,12 +22,19 @@ type HouseholdTotals = GivingStats;
 type MemberWithStats = {
   constituent: Record<string, unknown> | null;
   constituentId: number;
+  tasks?: MemberTaskSummary;
   stats?: GivingStats;
   statsDebug?: { transactionCount: number; includedCount: number; requestUrls: string[] };
   requestUrls?: string[];
   profileUrl?: string;
   statsError?: string;
   constituentError?: string;
+  tasksError?: string;
+};
+
+type MemberTaskSummary = {
+  active: BloomerangTask[];
+  loadedAt?: string;
 };
 
 type HouseholdStatus = {
@@ -109,6 +118,7 @@ export default function SearchPage() {
   const [noteSubmitting, setNoteSubmitting] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [recentlyLogged, setRecentlyLogged] = useState<{ memberId: number; action: MemberActionKey; ts: number } | null>(null);
+  const [taskActionRequest, setTaskActionRequest] = useState<{ memberId: number; action: 'create'; ts: number } | null>(null);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -198,8 +208,8 @@ export default function SearchPage() {
   const members = result?.members ?? [];
   const householdTotals = result?.householdTotals ?? null;
   const householdStatus = result?.householdStatus ?? null;
-  const memberActions = getMemberActions({ enableNote: true });
-  const visibleActions = memberActions.filter((action) => action.key === 'note' || action.key === 'interaction');
+  const memberActions = getMemberActions({ enableNote: true, enableTask: true });
+  const visibleActions = memberActions.filter((action) => action.key === 'note' || action.key === 'interaction' || action.key === 'task');
 
   const resetInteractionForm = () => {
     setInteractionChannel('Phone');
@@ -241,6 +251,11 @@ export default function SearchPage() {
   const showToast = (message: string) => {
     setToastMessage(message);
     setTimeout(() => setToastMessage(null), 3000);
+  };
+
+  const markRecentlyLogged = (memberId: number, action: MemberActionKey) => {
+    setRecentlyLogged({ memberId, action, ts: Date.now() });
+    setTimeout(() => setRecentlyLogged(null), 1000);
   };
 
   const handleInteractionSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -286,8 +301,7 @@ export default function SearchPage() {
 
       showToast(`Interaction logged for ${firstName}`);
       closeInteractionModal();
-      setRecentlyLogged({ memberId: interactionModalMember.constituentId, action: 'interaction', ts: Date.now() });
-      setTimeout(() => setRecentlyLogged(null), 1000);
+      markRecentlyLogged(interactionModalMember.constituentId, 'interaction');
     } catch (error) {
       console.error('Interaction creation failed', error);
       setInteractionError('Unable to log interaction.');
@@ -339,8 +353,7 @@ export default function SearchPage() {
 
       showToast(`Note saved for ${firstName}`);
       closeNoteModal();
-      setRecentlyLogged({ memberId: noteModalMember.constituentId, action: 'note', ts: Date.now() });
-      setTimeout(() => setRecentlyLogged(null), 1000);
+      markRecentlyLogged(noteModalMember.constituentId, 'note');
       void loadActivitySummary(true);
     } catch (error) {
       console.error('Note creation failed', error);
@@ -358,6 +371,11 @@ export default function SearchPage() {
 
     if (actionKey === 'note') {
       openNoteModal(member);
+      return;
+    }
+
+    if (actionKey === 'task') {
+      setTaskActionRequest({ memberId: member.constituentId, action: 'create', ts: Date.now() });
     }
   };
 
@@ -575,6 +593,7 @@ export default function SearchPage() {
                     const name = member.constituent
                       ? buildMemberName(member.constituent, member.constituentId)
                       : `Constituent ${member.constituentId}`;
+                    const firstName = getMemberFirstName(member.constituent ?? {}, member.constituentId);
                     const phone = member.constituent ? pickString(member.constituent, [
                       'PrimaryPhone.Number',
                       'primaryPhone.number',
@@ -630,6 +649,18 @@ export default function SearchPage() {
                             Stats unavailable{member.statsError ? `: ${member.statsError}` : ''}
                           </p>
                         )}
+
+                        <MemberTasks
+                          memberId={member.constituentId}
+                          memberName={name}
+                          memberFirstName={firstName}
+                          initialTasks={member.tasks?.active}
+                          tasksError={member.tasksError}
+                          onToast={showToast}
+                          onActionLogged={markRecentlyLogged}
+                          actionRequest={taskActionRequest && taskActionRequest.memberId === member.constituentId ? taskActionRequest : null}
+                          onActionRequestHandled={() => setTaskActionRequest(null)}
+                        />
                       </li>
                     );
                   })}

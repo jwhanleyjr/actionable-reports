@@ -1,5 +1,6 @@
 import 'server-only';
 
+import { getBloomerangBaseUrl } from '../../../../lib/bloomerangBase';
 import { fetchJsonWithModes, pickString, readValue } from '../utils';
 
 export type HouseholdNote = {
@@ -29,11 +30,6 @@ export type NotesResult = {
   error?: string;
   requestUrls?: string[];
 };
-
-export function getBloomerangBaseUrl() {
-  const envBase = process.env.BLOOMERANG_BASE_URL || 'https://api.bloomerang.co/v2';
-  return envBase.endsWith('/') ? envBase.slice(0, -1) : envBase;
-}
 
 export async function fetchHouseholdNotes(memberIds: number[], apiKey: string): Promise<NotesResult> {
   const notes: HouseholdNote[] = [];

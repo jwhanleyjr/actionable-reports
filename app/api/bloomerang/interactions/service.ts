@@ -1,7 +1,7 @@
 import 'server-only';
 
 import { fetchJsonWithModes, normalizeBoolean, pickString, readValue } from '../utils';
-import { getBloomerangBaseUrl } from '../notes/service';
+import { getBloomerangBaseUrl } from '../../../../lib/bloomerangBase';
 
 export type HouseholdInteraction = {
   id: number;

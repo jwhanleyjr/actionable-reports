@@ -14,10 +14,13 @@ import {
   pickNumber,
   readValue,
 } from '../utils';
+import { BloomerangTask } from '../../../../types/bloomerang';
+import { getActiveTasksForConstituent } from '../../../../lib/bloomerangTasks';
 
 type MemberWithStats = {
   constituent: Record<string, unknown> | null;
   constituentId: number;
+  tasks?: MemberTaskSummary;
   stats?: {
     lifetimeTotal: number;
     lastYearTotal: number;
@@ -30,9 +33,16 @@ type MemberWithStats = {
   profileUrl?: string;
   statsError?: string;
   constituentError?: string;
+  tasksError?: string;
 };
 
 type MemberWithTransactions = MemberWithStats & { transactions?: Transaction[] };
+
+type MemberTaskSummary = {
+  active: BloomerangTask[];
+  loadedAt: string;
+  requestUrl?: string;
+};
 
 type HouseholdTotals = {
   lifetimeTotal: number;
@@ -330,11 +340,15 @@ function extractIds(value: unknown): number[] {
 }
 
 async function buildMemberWithStats(constituentId: number, apiKey: string, existingProfile: Record<string, unknown> | null = null): Promise<MemberWithTransactions> {
-  const profileResult = existingProfile
-    ? { ok: true as const, constituent: existingProfile, url: undefined as string | undefined }
-    : await fetchConstituent(constituentId, apiKey);
+  const profilePromise = existingProfile
+    ? Promise.resolve({ ok: true as const, constituent: existingProfile, url: undefined as string | undefined })
+    : fetchConstituent(constituentId, apiKey);
 
-  const transactionsResult = await fetchTransactionsForConstituent(constituentId, apiKey);
+  const [profileResult, transactionsResult, tasksResult] = await Promise.all([
+    profilePromise,
+    fetchTransactionsForConstituent(constituentId, apiKey),
+    loadTasksSummary(constituentId),
+  ]);
 
   if (!transactionsResult.ok) {
     return {
@@ -344,6 +358,8 @@ async function buildMemberWithStats(constituentId: number, apiKey: string, exist
       profileUrl: profileResult.url,
       statsError: transactionsResult.error ?? transactionsResult.bodyPreview,
       constituentError: profileResult.ok ? undefined : profileResult.error,
+      tasks: tasksResult.tasks,
+      tasksError: tasksResult.error,
       transactions: [],
     } satisfies MemberWithTransactions;
   }
@@ -360,8 +376,25 @@ async function buildMemberWithStats(constituentId: number, apiKey: string, exist
     profileUrl: profileResult.url,
     statsError: undefined,
     constituentError: profileResult.ok ? undefined : profileResult.error,
+    tasks: tasksResult.tasks,
+    tasksError: tasksResult.error,
     transactions: transactionsResult.transactions,
   } satisfies MemberWithTransactions;
+}
+
+async function loadTasksSummary(constituentId: number): Promise<{ tasks?: MemberTaskSummary; error?: string }> {
+  try {
+    const response = await getActiveTasksForConstituent(constituentId);
+    return {
+      tasks: {
+        active: response.tasks,
+        loadedAt: new Date().toISOString(),
+        requestUrl: response.url,
+      },
+    };
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : 'Unable to load tasks.' };
+  }
 }
 
 async function fetchConstituent(constituentId: number, apiKey: string) {
