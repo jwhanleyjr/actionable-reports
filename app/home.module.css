@@ -1,0 +1,198 @@
+.page {
+  min-height: 100vh;
+  background: radial-gradient(circle at 20% 20%, #f5f7fb 0, #eef2f6 45%, #e7ecf5 100%);
+  color: #1f2a3d;
+}
+
+.shell {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 48px 24px 64px;
+}
+
+.hero {
+  text-align: left;
+  margin-bottom: 32px;
+}
+
+.kicker {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 700;
+  font-size: 12px;
+  color: #4f46e5;
+  margin-bottom: 8px;
+}
+
+.title {
+  font-size: clamp(28px, 4vw, 40px);
+  margin-bottom: 12px;
+  color: #0f172a;
+}
+
+.subtitle {
+  font-size: 16px;
+  color: #4b5563;
+  max-width: 720px;
+}
+
+.actionsSection {
+  margin-bottom: 40px;
+}
+
+.actionsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px;
+}
+
+.actionCard {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 16px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 12px;
+  box-shadow: 0 16px 32px rgba(15, 23, 42, 0.08);
+}
+
+.cardHeaderRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.cardTitle {
+  font-size: 18px;
+  font-weight: 700;
+  color: #111827;
+}
+
+.cardDescription {
+  color: #4b5563;
+  font-size: 15px;
+  line-height: 1.5;
+  margin-top: 4px;
+}
+
+.badge {
+  background: #eef2ff;
+  color: #4338ca;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.statusBadge {
+  background: #e0f2fe;
+  color: #0369a1;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.primaryButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: linear-gradient(135deg, #4f46e5, #4338ca);
+  color: #ffffff;
+  border: none;
+  border-radius: 12px;
+  padding: 10px 14px;
+  font-weight: 700;
+  font-size: 14px;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  box-shadow: 0 10px 20px rgba(79, 70, 229, 0.25);
+}
+
+.primaryButton:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 14px 24px rgba(79, 70, 229, 0.35);
+}
+
+.disabledButton {
+  background: #f3f4f6;
+  color: #9ca3af;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 10px 14px;
+  font-weight: 700;
+  font-size: 14px;
+  cursor: not-allowed;
+}
+
+.campaignsSection {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 18px;
+  padding: 24px;
+  box-shadow: 0 20px 40px rgba(15, 23, 42, 0.08);
+}
+
+.sectionHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.sectionTitle {
+  font-size: 22px;
+  color: #111827;
+}
+
+.ghostButton {
+  border: 1px solid #cbd5e1;
+  color: #0f172a;
+  background: #f8fafc;
+  border-radius: 12px;
+  padding: 10px 14px;
+  font-weight: 700;
+  font-size: 14px;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.ghostButton:hover {
+  background: #e5e7eb;
+  border-color: #94a3b8;
+}
+
+.campaignGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px;
+}
+
+.campaignCard {
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+  padding: 16px;
+  background: #f9fafb;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.metaText {
+  color: #6b7280;
+  font-size: 14px;
+}
+
+@media (max-width: 640px) {
+  .sectionHeader {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .hero {
+    text-align: left;
+  }
+}
