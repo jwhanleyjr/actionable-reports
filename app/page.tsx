@@ -51,11 +51,11 @@ export default function Home() {
     <main className={styles.page}>
       <div className={styles.shell}>
         <header className={styles.hero}>
-          <p className={styles.kicker}>Campaign Control Center</p>
-          <h1 className={styles.title}>Prepare your next round of outreach</h1>
+          <p className={styles.kicker}>DONOR OUTREACH AND ENGAGEMENT</p>
+          <h1 className={styles.title}>Turn donor data into meaningful action</h1>
           <p className={styles.subtitle}>
-            Choose how you want to start: upload a list, build one manually, or jump into an
-            individual constituent search.
+            Organize contacts into outreach lists, add people manually, or look up an individual to
+            review history and plan next steps that move your mission forward.
           </p>
         </header>
 
