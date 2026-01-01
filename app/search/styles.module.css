@@ -314,6 +314,20 @@
   gap: 12px;
 }
 
+.openingLine {
+  background: linear-gradient(135deg, #f5fbff, #ffffff);
+  border: 1px solid #cbe7fb;
+  border-radius: 10px;
+  padding: 12px 14px;
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.03);
+}
+
+.openingLineText {
+  margin: 0;
+  color: #0f172a;
+  font-style: italic;
+}
+
 .notesSummaryLabel {
   font-weight: 800;
   color: #1f2937;

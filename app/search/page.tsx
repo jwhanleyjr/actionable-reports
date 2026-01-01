@@ -32,6 +32,7 @@ type ActivitySummary = {
     recentTimeline: string[];
     lastMeaningfulInteraction: { date: string | null; channel: string | null; summary: string | null };
     suggestedNextSteps: string[];
+    recommendedOpeningLine: string;
   };
   notesMeta?: {
     totalFetched: number;
@@ -253,6 +254,15 @@ export default function SearchPage() {
                 <p className={styles.muted}>Generating summary…</p>
               ) : activitySummary?.ok && activitySummary.summary ? (
                 <div className={styles.notesSummary}>
+                  {activitySummary.summary.recommendedOpeningLine && (
+                    <div className={styles.openingLine}>
+                      <p className={styles.notesSummaryLabel}>Recommended Opening Line</p>
+                      <p className={styles.openingLineText}>
+                        {activitySummary.summary.recommendedOpeningLine}
+                      </p>
+                    </div>
+                  )}
+
                   <div className={styles.notesSummaryGrid}>
                     <div>
                       <p className={styles.notesSummaryLabel}>Key Points</p>

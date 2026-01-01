@@ -154,6 +154,7 @@ type ActivitySummary = {
   recentTimeline: string[];
   lastMeaningfulInteraction: { date: string | null; channel: string | null; summary: string | null };
   suggestedNextSteps: string[];
+  recommendedOpeningLine: string;
 };
 
 type SummaryInputs = {
@@ -172,19 +173,64 @@ function findLastMeaningfulInteraction(interactions: HouseholdInteraction[]) {
 }
 
 function formatNoteLine(note: { createdDate: string; accountId: number; note: string }) {
-  const date = new Date(note.createdDate);
-  const readableDate = Number.isNaN(date.getTime()) ? note.createdDate : date.toISOString().slice(0, 10);
+  const readableDate = formatReadableDate(note.createdDate);
   return `${readableDate} (Acct ${note.accountId}): ${note.note}`;
 }
 
 function formatInteractionLine(interaction: HouseholdInteraction) {
-  const date = new Date(interaction.createdDate);
-  const readableDate = Number.isNaN(date.getTime()) ? interaction.createdDate : date.toISOString().slice(0, 10);
+  const readableDate = formatReadableDate(interaction.createdDate || interaction.date);
   const channel = interaction.channel || 'Interaction';
   const direction = interaction.isInbound === null ? '' : interaction.isInbound ? 'Inbound' : 'Outbound';
   const subjectPart = interaction.subject ? ` | ${interaction.subject}` : '';
   const notePart = interaction.noteText ? ` | Note: ${interaction.noteText}` : '';
   return `${readableDate} [${channel}${direction ? ` - ${direction}` : ''}]${subjectPart}${notePart}`;
+}
+
+function formatReadableDate(value: string | null) {
+  if (!value) {
+    return 'Unknown date';
+  }
+
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toISOString().slice(0, 10);
+}
+
+function extractInterestSnippet(primary?: string | null, secondary?: string | null) {
+  const source = primary?.trim() || secondary?.trim();
+
+  if (!source) {
+    return null;
+  }
+
+  return source.length > 160 ? `${source.slice(0, 157)}…` : source;
+}
+
+function buildRecommendedOpeningLine(inputs: SummaryInputs, provided?: string | null) {
+  if (provided && provided.trim()) {
+    return provided.trim();
+  }
+
+  const latestNote = inputs.notes.length
+    ? [...inputs.notes].sort((a, b) => new Date(b.createdDate).getTime() - new Date(a.createdDate).getTime())[0]
+    : null;
+
+  if (inputs.lastMeaningful) {
+    const date = formatReadableDate(inputs.lastMeaningful.createdDate || inputs.lastMeaningful.date);
+    const channel = inputs.lastMeaningful.channel?.toLowerCase?.() || 'recent conversation';
+    const interest = extractInterestSnippet(inputs.lastMeaningful.noteText, inputs.lastMeaningful.subject)
+      || (latestNote ? extractInterestSnippet(latestNote.note) : null)
+      || 'your recent updates';
+
+    return `Great to reconnect after our ${channel} on ${date}. I appreciated hearing about ${interest}—how have things been since?`;
+  }
+
+  if (latestNote) {
+    const date = formatReadableDate(latestNote.createdDate);
+    const interest = extractInterestSnippet(latestNote.note) || 'your recent updates';
+    return `Thanks for sharing on ${date} about ${interest}. I’d love to catch up and hear how things are going.`;
+  }
+
+  return 'Looking forward to reconnecting and hearing how you have been lately.';
 }
 
 async function summarizeWithOpenAI(inputs: SummaryInputs): Promise<
@@ -203,13 +249,16 @@ async function summarizeWithOpenAI(inputs: SummaryInputs): Promise<
         recentTimeline: [],
         lastMeaningfulInteraction: { date: null, channel: null, summary: null },
         suggestedNextSteps: ['Capture a recent interaction before the next call.'],
+        recommendedOpeningLine: 'Looking forward to reconnecting and hearing how you have been lately.',
       },
     };
   }
 
   const promptLines = [
     'You are assisting a fundraiser preparing for personal donor calls.',
-    'Output JSON with: keyPoints (5-8 bullets), recentTimeline (3-8 bullets), lastMeaningfulInteraction (date, channel, summary), suggestedNextSteps (1-3 bullets).',
+    'Output JSON with: { "keyPoints": [...], "recentTimeline": [...], "lastMeaningfulInteraction": { "date": "...", "channel": "...", "summary": "..." }, "suggestedNextSteps": [...], "recommendedOpeningLine": "..." }.',
+    'keyPoints: 5-8 concise bullets. recentTimeline: 3-8 bullets, most recent first, and include date + channel when from interactions. suggestedNextSteps: 1-3 actionable bullets for a phone call.',
+    'recommendedOpeningLine: 1-2 sentences, natural phone-call opener, reference the most recent meaningful personal interaction (Phone/Text/Email/InPerson) if present, and mention a concrete interest/preference from notes or interactions when available. No donation ask. If no meaningful interaction, anchor to the most recent note or overall relationship context without asking for money.',
     'Emphasize interactions for recency and call prep; include dates and channels for timeline bullets when based on interactions.',
     'Keep tone concise, donor-call friendly, and actionable.',
     'Household interactions to summarize:',
@@ -270,6 +319,7 @@ async function summarizeWithOpenAI(inputs: SummaryInputs): Promise<
         recentTimeline: parsed.recentTimeline ?? [],
         lastMeaningfulInteraction: parsed.lastMeaningfulInteraction ?? { date: null, channel: null, summary: null },
         suggestedNextSteps: parsed.suggestedNextSteps ?? [],
+        recommendedOpeningLine: buildRecommendedOpeningLine(inputs, parsed.recommendedOpeningLine),
       },
     };
   } catch (error) {
