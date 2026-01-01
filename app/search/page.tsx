@@ -18,8 +18,7 @@ type MemberWithStats = {
   constituent: Record<string, unknown> | null;
   constituentId: number;
   stats?: GivingStats;
-  recentTransactions?: Array<{ id: string | number | null; amount: number; date: string | null; type: string | null }>;
-  statsDebug?: { transactionCount: number; includedCount: number; requestUrls: string[]; rawResponses?: unknown[] };
+  statsDebug?: { transactionCount: number; includedCount: number; requestUrls: string[] };
   requestUrls?: string[];
   profileUrl?: string;
   statsError?: string;
@@ -261,37 +260,6 @@ export default function SearchPage() {
                               label="Last Gift Date"
                               value={member.stats.lastGiftDate ? formatDate(member.stats.lastGiftDate) : '—'}
                             />
-                            <div className={styles.transactionsBlock}>
-                              <p className={styles.transactionsTitle}>Recent Transactions</p>
-                              {member.recentTransactions?.length ? (
-                                <ul className={styles.transactionList}>
-                                  {member.recentTransactions.map((txn, index) => (
-                                    <li key={`${member.constituentId}-${txn.id ?? index}`} className={styles.transactionItem}>
-                                      <div className={styles.transactionMain}>
-                                        <span className={styles.transactionAmount}>{formatCurrency(txn.amount)}</span>
-                                        <span className={styles.transactionDate}>{txn.date ? formatDate(txn.date) : 'No date'}</span>
-                                      </div>
-                                      <div className={styles.transactionMeta}>
-                                        {txn.type && <span className={styles.metaPill}>{txn.type}</span>}
-                                        {txn.id !== null && <span className={styles.metaPill}>ID: {txn.id}</span>}
-                                      </div>
-                                    </li>
-                                  ))}
-                                </ul>
-                              ) : (
-                                <p className={styles.muted}>No recent transactions.</p>
-                              )}
-                            </div>
-                            {member.statsDebug?.rawResponses?.length ? (
-                              <div className={styles.jsonBlock}>
-                                <p className={styles.jsonTitle}>Transaction API JSON</p>
-                                {member.statsDebug.rawResponses.map((raw, index) => (
-                                  <pre key={`${member.constituentId}-raw-${index}`} className={styles.jsonPre}>
-                                    {safeJsonStringify(raw)}
-                                  </pre>
-                                ))}
-                              </div>
-                            ) : null}
                           </div>
                         ) : (
                           <p className={styles.muted}>
@@ -360,14 +328,6 @@ function formatCurrency(amount: number) {
 function formatDate(value: string) {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString();
-}
-
-function safeJsonStringify(value: unknown) {
-  try {
-    return JSON.stringify(value, null, 2);
-  } catch (error) {
-    return 'Unable to display JSON response.';
-  }
 }
 
 function collectApiUrls(searchUrl?: string, householdUrl?: string, members?: MemberWithStats[]) {

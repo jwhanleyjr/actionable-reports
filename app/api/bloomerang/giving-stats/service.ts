@@ -16,14 +16,12 @@ export type StatsDebug = {
   transactionCount: number;
   includedCount: number;
   requestUrls: string[];
-  rawResponses: unknown[];
 };
 
 export type StatsResult = {
   ok: true;
   constituentId: number;
   stats: GivingStats;
-  recentTransactions: Array<{ id: string | number | null; amount: number; date: string | null; type: string | null }>;
   debug: StatsDebug;
 } | {
   ok: false;
@@ -40,7 +38,6 @@ const TAKE = 50;
 export async function calculateGivingStats(constituentId: number, apiKey: string): Promise<StatsResult> {
   const transactions: Transaction[] = [];
   const requestUrls: string[] = [];
-  const rawResponses: unknown[] = [];
   let skip = 0;
 
   while (true) {
@@ -67,7 +64,6 @@ export async function calculateGivingStats(constituentId: number, apiKey: string
     }
 
     const pageResults = normalizeTransactions(response.data);
-    rawResponses.push(response.data);
     transactions.push(...pageResults);
 
     if (pageResults.length < TAKE) {
@@ -83,8 +79,7 @@ export async function calculateGivingStats(constituentId: number, apiKey: string
     ok: true,
     constituentId,
     stats: stats.stats,
-    recentTransactions: stats.recentTransactions,
-    debug: { ...stats.debug, requestUrls, rawResponses },
+    debug: { ...stats.debug, requestUrls },
   };
 }
 
@@ -133,7 +128,6 @@ function summarizeTransactions(transactions: Transaction[]) {
   let lastGiftAmount: number | null = null;
   let lastGiftDate: string | null = null;
   let includedCount = 0;
-  const includedTransactions: Array<{ id: string | number | null; amount: number; date: string | null; type: string | null }> = [];
 
   for (const transaction of transactions) {
     if (!shouldIncludeTransaction(transaction)) {
@@ -146,9 +140,6 @@ function summarizeTransactions(transactions: Transaction[]) {
     lifetimeTotal += amount;
 
     const dateString = getTransactionDate(transaction);
-    const type = getTransactionType(transaction);
-    const id = getTransactionId(transaction);
-
     if (dateString) {
       const transactionDate = new Date(dateString);
 
@@ -168,12 +159,6 @@ function summarizeTransactions(transactions: Transaction[]) {
       }
     }
 
-    includedTransactions.push({
-      id,
-      amount,
-      date: dateString,
-      type,
-    });
   }
 
   return {
@@ -184,7 +169,6 @@ function summarizeTransactions(transactions: Transaction[]) {
       lastGiftAmount,
       lastGiftDate,
     },
-    recentTransactions: includedTransactions.slice(0, 5),
     debug: {
       transactionCount: transactions.length,
       includedCount,
@@ -288,15 +272,3 @@ function getTransactionType(transaction: Transaction) {
   return null;
 }
 
-function getTransactionId(transaction: Transaction) {
-  const id = readValue(transaction, 'Id')
-    ?? readValue(transaction, 'id')
-    ?? readValue(transaction, 'TransactionId')
-    ?? readValue(transaction, 'transactionId');
-
-  if (typeof id === 'string' || typeof id === 'number') {
-    return id;
-  }
-
-  return null;
-}

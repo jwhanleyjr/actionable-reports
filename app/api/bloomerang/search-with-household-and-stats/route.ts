@@ -19,12 +19,6 @@ type MemberWithStats = {
     lastGiftAmount: number | null;
     lastGiftDate: string | null;
   };
-  recentTransactions?: Array<{
-    id: string | number | null;
-    amount: number;
-    date: string | null;
-    type: string | null;
-  }>;
   statsDebug?: StatsDebug;
   requestUrls?: string[];
   profileUrl?: string;
@@ -83,8 +77,29 @@ export async function POST(request: NextRequest) {
   const constituent = searchResult.constituent;
   const constituentId = searchResult.constituentId;
 
-  const isInHousehold = searchResult.isInHousehold;
-  const householdId = searchResult.householdId;
+  let isInHousehold = searchResult.isInHousehold;
+  let householdId = searchResult.householdId;
+  let primaryProfile: Record<string, unknown> | null = (constituent as Record<string, unknown> | null) ?? null;
+
+  if ((!Number.isFinite(householdId) || isInHousehold === null) && Number.isFinite(constituentId)) {
+    const profileResult = await fetchConstituent(constituentId as number, apiKey);
+
+    if (profileResult.ok) {
+      primaryProfile = profileResult.constituent;
+
+      const profileHouseholdId = pickNumber(profileResult.constituent, ['HouseholdId', 'householdId']);
+      const profileHouseholdFlag = normalizeBoolean(readValue(profileResult.constituent, 'IsInHousehold')
+        ?? readValue(profileResult.constituent, 'isInHousehold'));
+
+      if (Number.isFinite(profileHouseholdId)) {
+        householdId = profileHouseholdId as number;
+      }
+
+      if (profileHouseholdFlag !== null) {
+        isInHousehold = profileHouseholdFlag;
+      }
+    }
+  }
 
   let household: Record<string, unknown> | null = null;
   let householdError: string | undefined;
@@ -104,8 +119,16 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  if (Number.isFinite(constituentId)) {
+    const existingIds = new Set(members.map((member) => member.constituentId));
+
+    if (!existingIds.has(constituentId as number)) {
+      members.unshift(await buildMemberWithStats(constituentId as number, apiKey, primaryProfile));
+    }
+  }
+
   if (!members.length && Number.isFinite(constituentId)) {
-    members = [await buildMemberWithStats(constituentId as number, apiKey, constituent ?? null)];
+    members = [await buildMemberWithStats(constituentId as number, apiKey, primaryProfile)];
   }
 
   const householdTotals = computeHouseholdTotals(members);
@@ -239,7 +262,6 @@ async function buildMemberWithStats(constituentId: number, apiKey: string, exist
     constituent: profileResult.ok ? profileResult.constituent : null,
     constituentId,
     stats: statsResult.ok ? statsResult.stats : undefined,
-    recentTransactions: statsResult.ok ? statsResult.recentTransactions : undefined,
     statsDebug: statsResult.ok ? statsResult.debug : undefined,
     requestUrls,
     profileUrl: profileResult.url,
