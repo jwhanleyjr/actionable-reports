@@ -54,11 +54,11 @@ export function parseAccountNumbersFromWorkbook(buffer: ArrayBuffer | Buffer): P
   }
 
   const sheet = workbook.Sheets[firstSheetName];
-  const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, {
+  const rows = XLSX.utils.sheet_to_json<unknown[]>(sheet, {
     header: 1,
     raw: true,
     defval: null,
-  }) as Array<unknown[]>;
+  });
 
   if (!rows.length) {
     return [];

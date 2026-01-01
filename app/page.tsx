@@ -11,6 +11,9 @@ type OutreachListCard = {
   households: number;
 };
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 const actionCards = [
   {
     title: 'Upload Excel',
@@ -36,6 +39,10 @@ const actionCards = [
 ];
 
 async function fetchLatestOutreachLists(): Promise<OutreachListCard[]> {
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    return [];
+  }
+
   const supabase = getSupabaseAdmin();
   const { data: lists } = await supabase
     .from('outreach_lists')

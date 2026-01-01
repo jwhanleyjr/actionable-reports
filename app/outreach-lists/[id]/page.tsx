@@ -19,7 +19,26 @@ type OutreachListHousehold = {
   household_snapshot: { displayName?: string };
 };
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 export default async function OutreachListDetailPage({ params }: { params: { id: string } }) {
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    return (
+      <main className={styles.page}>
+        <div className={styles.shell}>
+          <header className={styles.header}>
+            <div>
+              <p className={styles.kicker}>OUTREACH LIST</p>
+              <h1 className={styles.title}>Missing Supabase configuration</h1>
+            </div>
+          </header>
+          <p>Please configure Supabase environment variables to view outreach lists.</p>
+        </div>
+      </main>
+    );
+  }
+
   const supabase = getSupabaseAdmin();
   const [{ data: list }, { data: households }, { data: members }] = await Promise.all([
     supabase.from('outreach_lists').select('*').eq('id', params.id).single<OutreachListRecord>(),
