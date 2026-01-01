@@ -8,6 +8,7 @@ import {
   filterPersonalInteractions,
   selectInteractionsForSummary,
 } from '../interactions/service';
+import { buildHouseholdGivingInterests, GivingInterest } from '../giving-interests/service';
 import { getApiKey } from '../utils';
 
 const summaryCache = new Map<string, Promise<SummaryResponse>>();
@@ -101,6 +102,15 @@ async function buildSummary(memberIds: number[], apiKey: string): Promise<Summar
     totalFetched: interactionsResult.interactionsMeta.totalFetched,
   });
 
+  const givingInterestsResult = await buildHouseholdGivingInterests(memberIds, apiKey);
+
+  if (!givingInterestsResult.ok) {
+    console.error('Failed to derive giving interests for summary', {
+      memberIds,
+      status: givingInterestsResult.status,
+    });
+  }
+
   const filteredInteractions = filterPersonalInteractions(interactionsResult.interactions);
   const interactionSelection = selectInteractionsForSummary(filteredInteractions);
   const notesSelection = selectNotesForSummary(notesResult.notes);
@@ -121,6 +131,7 @@ async function buildSummary(memberIds: number[], apiKey: string): Promise<Summar
     notes: notesSelection.selected,
     interactions: interactionSelection.selected,
     lastMeaningful,
+    givingInterests: givingInterestsResult.ok ? givingInterestsResult.givingInterests : [],
   });
 
   if (!summary.ok) {
@@ -154,6 +165,7 @@ type ActivitySummary = {
   recentTimeline: string[];
   lastMeaningfulInteraction: { date: string | null; channel: string | null; summary: string | null };
   suggestedNextSteps: string[];
+  givingInterests: string[];
   recommendedOpeningLine: string;
 };
 
@@ -161,6 +173,7 @@ type SummaryInputs = {
   notes: { createdDate: string; accountId: number; note: string }[];
   interactions: HouseholdInteraction[];
   lastMeaningful: HouseholdInteraction | null;
+  givingInterests: GivingInterest[];
 };
 
 function findLastMeaningfulInteraction(interactions: HouseholdInteraction[]) {
@@ -195,6 +208,40 @@ function formatReadableDate(value: string | null) {
   return Number.isNaN(date.getTime()) ? value : date.toISOString().slice(0, 10);
 }
 
+function formatInterestLabel(interest: GivingInterest) {
+  const parts = [interest.fund, interest.campaign, interest.appeal].filter((part) => part && part.trim()) as string[];
+  return parts.join(' → ') || 'General giving';
+}
+
+function formatGivingInterestLine(interest: GivingInterest) {
+  const label = formatInterestLabel(interest);
+  const total = formatUsd(interest.totalAmount);
+  const lastGift = interest.lastGiftDate ? formatReadableDate(interest.lastGiftDate) : 'Unknown date';
+  return `- ${label} (Total: ${total}; Last: ${lastGift})`;
+}
+
+function formatUsd(amount: number) {
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount || 0);
+}
+
+function buildGivingInterestBullets(
+  interests: GivingInterest[],
+  modelBullets: string[] = [],
+) {
+  const cleanedModel = modelBullets.map((item) => item.trim()).filter(Boolean).slice(0, 6);
+
+  if (cleanedModel.length) {
+    return cleanedModel;
+  }
+
+  return interests.slice(0, 6).map((interest) => {
+    const label = formatInterestLabel(interest);
+    const total = formatUsd(interest.totalAmount);
+    const lastGift = interest.lastGiftDate ? formatReadableDate(interest.lastGiftDate) : 'most recent gift date unknown';
+    return `${label}: total ${total}, last gift ${lastGift}`;
+  });
+}
+
 function extractInterestSnippet(primary?: string | null, secondary?: string | null) {
   const source = primary?.trim() || secondary?.trim();
 
@@ -206,6 +253,12 @@ function extractInterestSnippet(primary?: string | null, secondary?: string | nu
 }
 
 function buildRecommendedOpeningLine(inputs: SummaryInputs, provided?: string | null) {
+  const topInterest = inputs.givingInterests[0];
+  const interestLabel = topInterest ? formatInterestLabel(topInterest) : null;
+  const interestSnippet = topInterest && topInterest.lastGiftDate
+    ? `${formatInterestLabel(topInterest)} (most recent gift ${formatReadableDate(topInterest.lastGiftDate)})`
+    : interestLabel;
+
   if (provided && provided.trim()) {
     return provided.trim();
   }
@@ -219,6 +272,7 @@ function buildRecommendedOpeningLine(inputs: SummaryInputs, provided?: string | 
     const channel = humanizeChannel(inputs.lastMeaningful.channel) || 'recent conversation';
     const interest = extractInterestSnippet(inputs.lastMeaningful.noteText, inputs.lastMeaningful.subject)
       || (latestNote ? extractInterestSnippet(latestNote.note) : null)
+      || interestSnippet
       || 'your recent updates';
 
     return `Great to reconnect after our ${channel} on ${date}. I appreciated hearing about ${interest}—how have things been since?`;
@@ -226,8 +280,12 @@ function buildRecommendedOpeningLine(inputs: SummaryInputs, provided?: string | 
 
   if (latestNote) {
     const date = formatReadableDate(latestNote.createdDate);
-    const interest = extractInterestSnippet(latestNote.note) || 'your recent updates';
+    const interest = extractInterestSnippet(latestNote.note) || interestSnippet || 'your recent updates';
     return `Thanks for sharing on ${date} about ${interest}. I’d love to catch up and hear how things are going.`;
+  }
+
+  if (interestLabel) {
+    return `Thank you for your continued support for ${interestLabel}. I’d love to connect soon and hear how things are going.`;
   }
 
   return 'Looking forward to reconnecting and hearing how you have been involved with us recently.';
@@ -268,6 +326,8 @@ async function summarizeWithOpenAI(inputs: SummaryInputs): Promise<
   }
 
   if (!inputs.notes.length && !inputs.interactions.length) {
+    const interestBullets = buildGivingInterestBullets(inputs.givingInterests);
+
     return {
       ok: true,
       summary: {
@@ -275,18 +335,23 @@ async function summarizeWithOpenAI(inputs: SummaryInputs): Promise<
         recentTimeline: [],
         lastMeaningfulInteraction: { date: null, channel: null, summary: null },
         suggestedNextSteps: ['Capture a recent interaction before the next call.'],
-        recommendedOpeningLine: 'Looking forward to reconnecting and hearing how you have been lately.',
+        givingInterests: interestBullets,
+        recommendedOpeningLine: buildRecommendedOpeningLine(inputs, null),
       },
     };
   }
 
   const promptLines = [
     'You are assisting a fundraiser preparing for personal donor calls.',
-    'Output JSON with: { "keyPoints": [...], "recentTimeline": [...], "lastMeaningfulInteraction": { "date": "...", "channel": "...", "summary": "..." }, "suggestedNextSteps": [...], "recommendedOpeningLine": "..." }.',
+    'Output JSON with: { "keyPoints": [...], "recentTimeline": [...], "lastMeaningfulInteraction": { "date": "...", "channel": "...", "summary": "..." }, "suggestedNextSteps": [...], "givingInterests": [...], "recommendedOpeningLine": "..." }.',
     'keyPoints: 5-8 concise bullets. recentTimeline: 3-8 bullets, most recent first, and include date + channel when from interactions. suggestedNextSteps: 1-3 actionable bullets for a phone call.',
-    'recommendedOpeningLine: 1-2 sentences, natural phone-call opener. Reference the most recent meaningful personal interaction (Phone/Text/Email/InPerson) if present and nod to a concrete interest/preference mentioned in notes or interactions (e.g., building project, tile choice). Avoid donation asks. If no meaningful interaction exists, ground the opener in the most recent note or their relationship with the organization—still no money ask.',
+    'givingInterests: 3-6 concise bullets in plain language that summarize giving patterns from the provided interests (avoid IDs).',
+    'recommendedOpeningLine: 1-2 sentences, natural phone-call opener. Reference the most recent meaningful personal interaction (Phone/Text/Email/InPerson) if present and nod to at least one concrete giving interest when possible. Avoid donation asks. If no meaningful interaction exists, ground the opener in the most recent note or their relationship with the organization—still no money ask.',
     'Emphasize interactions for recency and call prep; include dates and channels for timeline bullets when based on interactions.',
     'Keep tone concise, donor-call friendly, and actionable.',
+    ...(inputs.givingInterests.length
+      ? ['Giving Interests (derived from transactions):', ...inputs.givingInterests.map(formatGivingInterestLine)]
+      : []),
     'Household interactions to summarize:',
     ...inputs.interactions.map((interaction) => `- ${formatInteractionLine(interaction)}`),
     'Household notes to summarize:',
@@ -378,6 +443,7 @@ function sanitizeSummary(summary: Partial<ActivitySummary>, inputs: SummaryInput
     recentTimeline: toStrings(summary.recentTimeline),
     lastMeaningfulInteraction: safeLastMeaningful,
     suggestedNextSteps: toStrings(summary.suggestedNextSteps),
+    givingInterests: buildGivingInterestBullets(inputs.givingInterests, toStrings(summary.givingInterests)),
     recommendedOpeningLine: buildRecommendedOpeningLine(inputs, opener),
   };
 }

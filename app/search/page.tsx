@@ -32,6 +32,7 @@ type ActivitySummary = {
     recentTimeline: string[];
     lastMeaningfulInteraction: { date: string | null; channel: string | null; summary: string | null };
     suggestedNextSteps: string[];
+    givingInterests: string[];
     recommendedOpeningLine: string;
   };
   notesMeta?: {
@@ -227,7 +228,15 @@ export default function SearchPage() {
                 ) : result.householdError ? (
                   <p className={styles.muted}>{result.householdError}</p>
                 ) : members.length === 1 ? (
-                  <p className={styles.muted}>Single-person household; using constituent directly.</p>
+                  (() => {
+                    const onlyMember = members[0];
+                    const name =
+                      onlyMember.constituent && typeof onlyMember.constituent === 'object'
+                        ? buildMemberName(onlyMember.constituent, onlyMember.constituentId)
+                        : `Constituent ${onlyMember.constituentId}`;
+
+                    return <p className={styles.muted}>{name}</p>;
+                  })()
                 ) : (
                   <p className={styles.muted}>No household data found.</p>
                 )
@@ -263,32 +272,28 @@ export default function SearchPage() {
                     </div>
                   )}
 
-                  <div className={styles.notesSummaryGrid}>
+                  {activitySummary.summary.givingInterests?.length ? (
                     <div>
-                      <p className={styles.notesSummaryLabel}>Key Points</p>
-                      {activitySummary.summary.keyPoints.length ? (
-                        <ul className={styles.bulletList}>
-                          {activitySummary.summary.keyPoints.map((point, index) => (
-                            <li key={index}>{point}</li>
-                          ))}
-                        </ul>
-                      ) : (
-                        <p className={styles.muted}>No key points returned.</p>
-                      )}
+                      <p className={styles.notesSummaryLabel}>Giving Interests</p>
+                      <ul className={styles.bulletList}>
+                        {activitySummary.summary.givingInterests.map((interest, index) => (
+                          <li key={index}>{interest}</li>
+                        ))}
+                      </ul>
                     </div>
+                  ) : null}
 
-                    <div>
-                      <p className={styles.notesSummaryLabel}>Suggested Next Steps</p>
-                      {activitySummary.summary.suggestedNextSteps.length ? (
-                        <ul className={styles.bulletList}>
-                          {activitySummary.summary.suggestedNextSteps.map((step, index) => (
-                            <li key={index}>{step}</li>
-                          ))}
-                        </ul>
-                      ) : (
-                        <p className={styles.muted}>No suggestions returned.</p>
-                      )}
-                    </div>
+                  <div>
+                    <p className={styles.notesSummaryLabel}>Key Points</p>
+                    {activitySummary.summary.keyPoints.length ? (
+                      <ul className={styles.bulletList}>
+                        {activitySummary.summary.keyPoints.map((point, index) => (
+                          <li key={index}>{point}</li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className={styles.muted}>No key points returned.</p>
+                    )}
                   </div>
 
                   <div>
@@ -301,6 +306,19 @@ export default function SearchPage() {
                       </ul>
                     ) : (
                       <p className={styles.muted}>No recent timeline available.</p>
+                    )}
+                  </div>
+
+                  <div>
+                    <p className={styles.notesSummaryLabel}>Suggested Next Steps</p>
+                    {activitySummary.summary.suggestedNextSteps.length ? (
+                      <ul className={styles.bulletList}>
+                        {activitySummary.summary.suggestedNextSteps.map((step, index) => (
+                          <li key={index}>{step}</li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className={styles.muted}>No suggestions returned.</p>
                     )}
                   </div>
 

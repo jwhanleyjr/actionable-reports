@@ -2,7 +2,15 @@ import 'server-only';
 
 import { fetchJsonWithModes, normalizeBoolean, pickNumber, readValue } from '../utils';
 
-type Transaction = Record<string, unknown>;
+export type Transaction = Record<string, unknown>;
+
+export type TransactionDesignation = {
+  fundName: string | null;
+  campaignName: string | null;
+  appealName: string | null;
+  amount: number;
+  date: string | null;
+};
 
 export type GivingStats = {
   lifetimeTotal: number;
@@ -32,10 +40,44 @@ export type StatsResult = {
   requestUrls?: string[];
 };
 
+export type TransactionsResult = {
+  ok: true;
+  constituentId: number;
+  transactions: Transaction[];
+  requestUrls: string[];
+} | {
+  ok: false;
+  status?: number;
+  url?: string;
+  bodyPreview?: string;
+  error?: string;
+  requestUrls: string[];
+};
+
 const INCLUDED_TYPES = new Set(['Donation', 'PledgePayment', 'RecurringDonationPayment']);
 const TAKE = 50;
 
 export async function calculateGivingStats(constituentId: number, apiKey: string): Promise<StatsResult> {
+  const transactionsResult = await fetchTransactionsForConstituent(constituentId, apiKey);
+
+  if (!transactionsResult.ok) {
+    return { ...transactionsResult, ok: false };
+  }
+
+  const summary = summarizeTransactions(transactionsResult.transactions);
+
+  return {
+    ok: true,
+    constituentId,
+    stats: summary.stats,
+    debug: { ...summary.debug, requestUrls: transactionsResult.requestUrls },
+  };
+}
+
+export async function fetchTransactionsForConstituent(
+  constituentId: number,
+  apiKey: string,
+): Promise<TransactionsResult> {
   const transactions: Transaction[] = [];
   const requestUrls: string[] = [];
   let skip = 0;
@@ -73,14 +115,7 @@ export async function calculateGivingStats(constituentId: number, apiKey: string
     skip += TAKE;
   }
 
-  const stats = summarizeTransactions(transactions);
-
-  return {
-    ok: true,
-    constituentId,
-    stats: stats.stats,
-    debug: { ...stats.debug, requestUrls },
-  };
+  return { ok: true as const, constituentId, transactions, requestUrls };
 }
 
 function normalizeTransactions(data: unknown): Transaction[] {
@@ -116,7 +151,7 @@ function normalizeTransactions(data: unknown): Transaction[] {
   return attemptNormalize(data);
 }
 
-function summarizeTransactions(transactions: Transaction[]) {
+export function summarizeTransactions(transactions: Transaction[]) {
   const now = new Date();
   const currentYearStart = new Date(now.getFullYear(), 0, 1);
   const lastYearStart = new Date(now.getFullYear() - 1, 0, 1);
@@ -128,6 +163,7 @@ function summarizeTransactions(transactions: Transaction[]) {
   let lastGiftAmount: number | null = null;
   let lastGiftDate: string | null = null;
   let includedCount = 0;
+  const designationDetails: TransactionDesignation[] = [];
 
   for (const transaction of transactions) {
     if (!shouldIncludeTransaction(transaction)) {
@@ -159,6 +195,8 @@ function summarizeTransactions(transactions: Transaction[]) {
       }
     }
 
+    const designations = extractDesignationEntries(transaction, dateString);
+    designationDetails.push(...designations);
   }
 
   return {
@@ -173,6 +211,7 @@ function summarizeTransactions(transactions: Transaction[]) {
       transactionCount: transactions.length,
       includedCount,
     },
+    designations: designationDetails,
   };
 }
 
@@ -270,5 +309,52 @@ function getTransactionType(transaction: Transaction) {
   }
 
   return null;
+}
+
+function extractDesignationEntries(transaction: Transaction, fallbackDate: string | null): TransactionDesignation[] {
+  const designations = readValue(transaction, 'Designations');
+
+  if (!Array.isArray(designations) || !designations.length) {
+    return [];
+  }
+
+  return designations
+    .map((designation) => {
+      if (!designation || typeof designation !== 'object') {
+        return null;
+      }
+
+      const fundName = normalizeName(readValue(designation as Transaction, 'Fund.Name'))
+        ?? normalizeName(readValue(designation as Transaction, 'FundName'));
+      const campaignName = normalizeName(readValue(designation as Transaction, 'Campaign.Name'))
+        ?? normalizeName(readValue(designation as Transaction, 'CampaignName'));
+      const appealName = normalizeName(readValue(designation as Transaction, 'Appeal.Name'))
+        ?? normalizeName(readValue(designation as Transaction, 'AppealName'));
+      const amount = pickNumber(designation as Transaction, [
+        'Amount',
+        'amount',
+        'AmountValue',
+        'amountValue',
+        'Amount.Amount',
+      ]) ?? getTransactionAmount(transaction);
+      const date = getTransactionDate(transaction) ?? fallbackDate;
+
+      if (!fundName && !campaignName && !appealName && !amount) {
+        return null;
+      }
+
+      return {
+        fundName: fundName ?? null,
+        campaignName: campaignName ?? null,
+        appealName: appealName ?? null,
+        amount: typeof amount === 'number' && Number.isFinite(amount) ? amount : 0,
+        date: typeof date === 'string' && date.trim() ? date : null,
+      } satisfies TransactionDesignation;
+    })
+    .filter((entry): entry is TransactionDesignation => Boolean(entry));
+}
+
+function normalizeName(value: unknown) {
+  return typeof value === 'string' && value.trim() ? value.trim() : null;
 }
 
