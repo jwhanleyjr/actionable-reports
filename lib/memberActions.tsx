@@ -93,18 +93,18 @@ export function getMemberActions(options: GetMemberActionsOptions = {}): MemberA
 
   return [
     {
+      key: 'note',
+      label: 'Add Note',
+      icon: noteIcon,
+      enabled: enableNote,
+      tooltip: 'Add a note',
+    },
+    {
       key: 'interaction',
       label: 'Log Interaction',
       icon: chatBubbleIcon,
       enabled: true,
       tooltip: 'Log a new interaction',
-    },
-    {
-      key: 'note',
-      label: 'Add Note',
-      icon: noteIcon,
-      enabled: enableNote,
-      tooltip: 'Add a note (coming soon)',
     },
     {
       key: 'task',
