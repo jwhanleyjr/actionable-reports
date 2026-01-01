@@ -111,7 +111,7 @@ export function getMemberActions(options: GetMemberActionsOptions = {}): MemberA
       label: 'Create Task',
       icon: taskIcon,
       enabled: enableTask,
-      tooltip: 'Create a task (coming soon)',
+      tooltip: 'Create a task',
     },
   ];
 }
