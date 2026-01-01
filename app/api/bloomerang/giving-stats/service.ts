@@ -40,6 +40,11 @@ export type StatsResult = {
   requestUrls?: string[];
 };
 
+export type HouseholdStatus = {
+  lifecycle: 'Current' | 'Retain' | 'Regain' | 'Potential';
+  isRecurring: boolean;
+};
+
 export type TransactionsResult = {
   ok: true;
   constituentId: number;
@@ -213,6 +218,73 @@ export function summarizeTransactions(transactions: Transaction[]) {
     },
     designations: designationDetails,
   };
+}
+
+export function computeHouseholdStatus(transactions: Transaction[]): HouseholdStatus {
+  const now = new Date();
+  const startOfThisYear = new Date(now.getFullYear(), 0, 1);
+  const startOfLastYear = new Date(now.getFullYear() - 1, 0, 1);
+
+  let hasAnyGiftsEver = false;
+  let hasGiftThisYear = false;
+  let hasGiftLastYear = false;
+  let hasGiftBeforeLastYear = false;
+  let isRecurring = false;
+
+  for (const transaction of transactions) {
+    if (!shouldIncludeTransaction(transaction)) {
+      continue;
+    }
+
+    hasAnyGiftsEver = true;
+
+    const type = getTransactionType(transaction);
+
+    if (typeof type === 'string' && type.trim() === 'RecurringDonationPayment') {
+      isRecurring = true;
+    }
+
+    const dateString = getTransactionDate(transaction);
+
+    if (!dateString) {
+      continue;
+    }
+
+    const transactionDate = new Date(dateString);
+
+    if (Number.isNaN(transactionDate.getTime())) {
+      continue;
+    }
+
+    if (transactionDate >= startOfThisYear) {
+      hasGiftThisYear = true;
+      continue;
+    }
+
+    if (transactionDate >= startOfLastYear) {
+      hasGiftLastYear = true;
+    } else {
+      hasGiftBeforeLastYear = true;
+    }
+  }
+
+  if (!hasAnyGiftsEver) {
+    return { lifecycle: 'Potential', isRecurring } satisfies HouseholdStatus;
+  }
+
+  if (hasGiftThisYear) {
+    return { lifecycle: 'Current', isRecurring } satisfies HouseholdStatus;
+  }
+
+  if (hasGiftLastYear) {
+    return { lifecycle: 'Retain', isRecurring } satisfies HouseholdStatus;
+  }
+
+  if (hasGiftBeforeLastYear) {
+    return { lifecycle: 'Regain', isRecurring } satisfies HouseholdStatus;
+  }
+
+  return { lifecycle: 'Potential', isRecurring } satisfies HouseholdStatus;
 }
 
 function shouldIncludeTransaction(transaction: Transaction) {

@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-import { StatsDebug, calculateGivingStats } from '../giving-stats/service';
+import {
+  StatsDebug,
+  Transaction,
+  computeHouseholdStatus,
+  fetchTransactionsForConstituent,
+  summarizeTransactions,
+} from '../giving-stats/service';
 import {
   fetchJsonWithModes,
   getApiKey,
@@ -25,6 +31,8 @@ type MemberWithStats = {
   statsError?: string;
   constituentError?: string;
 };
+
+type MemberWithTransactions = MemberWithStats & { transactions?: Transaction[] };
 
 type HouseholdTotals = {
   lifetimeTotal: number;
@@ -104,7 +112,7 @@ export async function POST(request: NextRequest) {
   let household: Record<string, unknown> | null = null;
   let householdError: string | undefined;
   let householdUrl: string | undefined;
-  let members: MemberWithStats[] = [];
+  let members: MemberWithTransactions[] = [];
 
   if (Number.isFinite(householdId) && isInHousehold !== false) {
     const householdResult = await getHousehold(householdId as number, apiKey);
@@ -132,14 +140,18 @@ export async function POST(request: NextRequest) {
   }
 
   const householdTotals = computeHouseholdTotals(members);
+  const householdTransactions = members.flatMap((member) => member.transactions ?? []);
+  const householdStatus = computeHouseholdStatus(householdTransactions);
+  const membersForResponse: MemberWithStats[] = members.map(({ transactions, ...member }) => member);
 
   return NextResponse.json({
     ok: true,
     constituent,
     household,
     householdError,
-    members,
+    members: membersForResponse,
     householdTotals,
+    householdStatus,
     searchUrl: searchResult.url,
     householdUrl,
   });
@@ -225,7 +237,7 @@ async function getHousehold(householdId: number, apiKey: string) {
   };
 }
 
-async function loadMembersFromHousehold(household: Record<string, unknown>, apiKey: string): Promise<MemberWithStats[]> {
+async function loadMembersFromHousehold(household: Record<string, unknown>, apiKey: string): Promise<MemberWithTransactions[]> {
   const memberRecords = getMemberArray(household);
   const idsFromRecords = memberRecords
     .map((member) => pickNumber(member, [
@@ -317,26 +329,39 @@ function extractIds(value: unknown): number[] {
   return [];
 }
 
-async function buildMemberWithStats(constituentId: number, apiKey: string, existingProfile: Record<string, unknown> | null = null): Promise<MemberWithStats> {
+async function buildMemberWithStats(constituentId: number, apiKey: string, existingProfile: Record<string, unknown> | null = null): Promise<MemberWithTransactions> {
   const profileResult = existingProfile
     ? { ok: true as const, constituent: existingProfile, url: undefined as string | undefined }
     : await fetchConstituent(constituentId, apiKey);
 
-  const statsResult = await calculateGivingStats(constituentId, apiKey);
-  const requestUrls = statsResult.ok
-    ? statsResult.debug.requestUrls
-    : statsResult.requestUrls ?? (statsResult.url ? [statsResult.url] : []);
+  const transactionsResult = await fetchTransactionsForConstituent(constituentId, apiKey);
+
+  if (!transactionsResult.ok) {
+    return {
+      constituent: profileResult.ok ? profileResult.constituent : null,
+      constituentId,
+      requestUrls: transactionsResult.requestUrls,
+      profileUrl: profileResult.url,
+      statsError: transactionsResult.error ?? transactionsResult.bodyPreview,
+      constituentError: profileResult.ok ? undefined : profileResult.error,
+      transactions: [],
+    } satisfies MemberWithTransactions;
+  }
+
+  const summary = summarizeTransactions(transactionsResult.transactions);
+  const requestUrls = transactionsResult.requestUrls;
 
   return {
     constituent: profileResult.ok ? profileResult.constituent : null,
     constituentId,
-    stats: statsResult.ok ? statsResult.stats : undefined,
-    statsDebug: statsResult.ok ? statsResult.debug : undefined,
+    stats: summary.stats,
+    statsDebug: { ...summary.debug, requestUrls } satisfies StatsDebug,
     requestUrls,
     profileUrl: profileResult.url,
-    statsError: statsResult.ok ? undefined : statsResult.error ?? statsResult.bodyPreview,
+    statsError: undefined,
     constituentError: profileResult.ok ? undefined : profileResult.error,
-  };
+    transactions: transactionsResult.transactions,
+  } satisfies MemberWithTransactions;
 }
 
 async function fetchConstituent(constituentId: number, apiKey: string) {
