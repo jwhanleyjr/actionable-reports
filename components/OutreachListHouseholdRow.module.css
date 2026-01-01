@@ -1,0 +1,60 @@
+.card {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  margin-bottom: 12px;
+  overflow: hidden;
+}
+
+.rowButton {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  padding: 16px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+}
+
+.householdName {
+  font-weight: 700;
+  font-size: 18px;
+}
+
+.meta {
+  color: #6b7280;
+  margin-top: 4px;
+}
+
+.chevron {
+  font-size: 24px;
+  color: #374151;
+}
+
+.members {
+  border-top: 1px solid #e5e7eb;
+  padding: 12px 16px 16px;
+  display: grid;
+  gap: 10px;
+}
+
+.memberCard {
+  padding: 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  background: #f9fafb;
+}
+
+.memberName {
+  font-weight: 600;
+}
+
+.memberMeta {
+  display: flex;
+  gap: 8px;
+  color: #4b5565;
+  font-size: 14px;
+  margin-top: 4px;
+}

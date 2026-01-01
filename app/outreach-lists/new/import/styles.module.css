@@ -1,0 +1,87 @@
+.page {
+  min-height: 100vh;
+  padding: 48px 0 96px;
+  background: #eef2f6;
+}
+
+.shell {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 0 24px;
+}
+
+.title {
+  font-size: 32px;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.subtitle {
+  color: #4b5565;
+  margin-bottom: 32px;
+  line-height: 1.5;
+}
+
+.form {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 24px;
+  display: grid;
+  gap: 16px;
+}
+
+.label {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-weight: 600;
+}
+
+.input,
+.select,
+.fileInput {
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid #d1d5db;
+  font-size: 16px;
+}
+
+.fileInput {
+  padding: 10px;
+}
+
+.helper {
+  font-weight: 400;
+  color: #6b7280;
+  font-size: 14px;
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-start;
+  margin-top: 8px;
+}
+
+.primaryButton {
+  background: #2563eb;
+  color: #fff;
+  padding: 12px 18px;
+  border-radius: 10px;
+  border: none;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.primaryButton:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.error {
+  color: #b91c1c;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  padding: 12px;
+  border-radius: 8px;
+}
