@@ -25,6 +25,11 @@ type MemberWithStats = {
   constituentError?: string;
 };
 
+type HouseholdStatus = {
+  lifecycle: 'Current' | 'Retain' | 'Regain' | 'Potential';
+  isRecurring: boolean;
+};
+
 type ActivitySummary = {
   ok: boolean;
   summary?: {
@@ -69,6 +74,7 @@ type CombinedSearchResult = {
   householdError?: string;
   members?: MemberWithStats[];
   householdTotals?: HouseholdTotals;
+  householdStatus?: HouseholdStatus;
   searchUrl?: string;
   householdUrl?: string;
   bodyPreview?: string;
@@ -171,6 +177,7 @@ export default function SearchPage() {
 
   const members = result?.members ?? [];
   const householdTotals = result?.householdTotals ?? null;
+  const householdStatus = result?.householdStatus ?? null;
 
   return (
     <main className={styles.page}>
@@ -222,9 +229,10 @@ export default function SearchPage() {
                 <p className={styles.muted}>Loading…</p>
               ) : result ? (
                 result.household ? (
-                  <p className={styles.muted}>
-                    {extractHouseholdName(result.household) ?? 'No household name found.'}
-                  </p>
+                  <HouseholdHeader
+                    name={extractHouseholdName(result.household) ?? 'No household name found.'}
+                    status={householdStatus}
+                  />
                 ) : result.householdError ? (
                   <p className={styles.muted}>{result.householdError}</p>
                 ) : members.length === 1 ? (
@@ -235,7 +243,7 @@ export default function SearchPage() {
                         ? buildMemberName(onlyMember.constituent, onlyMember.constituentId)
                         : `Constituent ${onlyMember.constituentId}`;
 
-                    return <p className={styles.muted}>{name}</p>;
+                    return <HouseholdHeader name={name} status={householdStatus} />;
                   })()
                 ) : (
                   <p className={styles.muted}>No household data found.</p>
@@ -441,6 +449,61 @@ export default function SearchPage() {
         </div>
       </div>
     </main>
+  );
+}
+
+const LIFECYCLE_TOOLTIPS: Record<HouseholdStatus['lifecycle'], string> = {
+  Current: 'They’ve already given this year—an active supporter right now.',
+  Retain: 'They gave last year but haven’t given yet this year. A warm update and invitation can help retain them.',
+  Regain: 'They’ve given in the past, but not last year or this year. A reconnecting call can reopen the relationship.',
+  Potential: 'No recorded gifts yet. Focus on learning their interests and sharing ways to get involved.',
+};
+
+const RECURRING_TOOLTIP = 'They support through recurring gifts. Keep the call focused on gratitude and impact.';
+
+function HouseholdHeader({ name, status }: { name: string; status: HouseholdStatus | null }) {
+  const lifecycle = status?.lifecycle;
+
+  return (
+    <div className={styles.householdHeader}>
+      <p className={styles.muted}>{name}</p>
+      {lifecycle ? (
+        <div className={styles.pillRow}>
+          <LifecyclePill lifecycle={lifecycle} />
+          {status?.isRecurring ? <RecurringPill /> : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function LifecyclePill({ lifecycle }: { lifecycle: HouseholdStatus['lifecycle'] }) {
+  const className = styles[`pill${lifecycle}`];
+
+  return (
+    <Pill
+      label={lifecycle}
+      tooltip={LIFECYCLE_TOOLTIPS[lifecycle]}
+      className={className ? `${styles.pill} ${className}` : styles.pill}
+    />
+  );
+}
+
+function RecurringPill() {
+  return (
+    <Pill
+      label="Recurring"
+      tooltip={RECURRING_TOOLTIP}
+      className={`${styles.pill} ${styles.pillRecurring}`}
+    />
+  );
+}
+
+function Pill({ label, tooltip, className }: { label: string; tooltip: string; className: string }) {
+  return (
+    <span className={className} title={tooltip}>
+      {label}
+    </span>
   );
 }
 
