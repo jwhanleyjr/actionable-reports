@@ -55,13 +55,11 @@ export default function SearchPage() {
   const [result, setResult] = useState<CombinedSearchResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [searchedAccountNumber, setSearchedAccountNumber] = useState('');
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError(null);
     setResult(null);
-    setSearchedAccountNumber('');
 
     const trimmed = accountNumber.trim();
     if (!trimmed) {
@@ -69,7 +67,6 @@ export default function SearchPage() {
       return;
     }
 
-    setSearchedAccountNumber(trimmed);
     setLoading(true);
 
     try {
@@ -100,7 +97,6 @@ export default function SearchPage() {
 
   const members = result?.members ?? [];
   const householdTotals = result?.householdTotals ?? null;
-  const apiUrls = collectApiUrls(result?.searchUrl, result?.householdUrl, members);
 
   return (
     <main className={styles.page}>
@@ -146,30 +142,6 @@ export default function SearchPage() {
           {error && <div className={styles.error}>{error}</div>}
 
           <div className={styles.outputStack}>
-            <div className={styles.output}>
-              <p className={styles.outputLabel}>Constituent Search</p>
-              {loading ? (
-                <p className={styles.muted}>Loading…</p>
-              ) : result ? (
-                <ul className={styles.memberList}>
-                  <li className={styles.memberItem}>
-                    <div className={styles.memberName}>Account Number</div>
-                    <div className={styles.memberMeta}>
-                      <span className={styles.metaPill}>{searchedAccountNumber}</span>
-                    </div>
-                  </li>
-                  <li className={styles.memberItem}>
-                    <div className={styles.memberName}>Constituent ID</div>
-                    <div className={styles.memberMeta}>
-                      <span className={styles.metaPill}>{extractConstituentId(result.constituent) ?? 'Not found'}</span>
-                    </div>
-                  </li>
-                </ul>
-              ) : (
-                <p className={styles.muted}>Submit a search to see results here.</p>
-              )}
-            </div>
-
             <div className={styles.output}>
               <p className={styles.outputLabel}>Household</p>
               {loading ? (
@@ -276,26 +248,6 @@ export default function SearchPage() {
                 <p className={styles.muted}>Search for a constituent to see their household members.</p>
               )}
             </div>
-
-            <div className={styles.output}>
-              <p className={styles.outputLabel}>API Call URLs</p>
-              {loading ? (
-                <p className={styles.muted}>Loading…</p>
-              ) : apiUrls.length ? (
-                <ul className={styles.urlList}>
-                  {apiUrls.map((entry) => (
-                    <li key={`${entry.label}-${entry.url}`} className={styles.urlItem}>
-                      <span className={styles.urlLabel}>{entry.label}</span>
-                      <code className={styles.urlValue}>{entry.url}</code>
-                    </li>
-                  ))}
-                </ul>
-              ) : result ? (
-                <p className={styles.muted}>No URLs reported.</p>
-              ) : (
-                <p className={styles.muted}>Search to see the API requests used.</p>
-              )}
-            </div>
           </div>
         </div>
       </div>
@@ -328,32 +280,6 @@ function formatCurrency(amount: number) {
 function formatDate(value: string) {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString();
-}
-
-function collectApiUrls(searchUrl?: string, householdUrl?: string, members?: MemberWithStats[]) {
-  const urls: Array<{ label: string; url: string }> = [];
-
-  if (searchUrl) {
-    urls.push({ label: 'Search constituent', url: searchUrl });
-  }
-
-  if (householdUrl) {
-    urls.push({ label: 'Household lookup', url: householdUrl });
-  }
-
-  for (const member of members ?? []) {
-    if (member.profileUrl) {
-      urls.push({ label: `Member ${member.constituentId} profile`, url: member.profileUrl });
-    }
-
-    if (member.requestUrls?.length) {
-      member.requestUrls.forEach((url, index) => {
-        urls.push({ label: `Member ${member.constituentId} transactions ${index + 1}`, url });
-      });
-    }
-  }
-
-  return urls;
 }
 
 function extractHouseholdName(data: unknown): string | null {
@@ -394,25 +320,6 @@ function extractHouseholdName(data: unknown): string | null {
   return null;
 }
 
-function extractConstituentId(data: unknown): number | null {
-  const firstResult = Array.isArray((data as { Results?: unknown[] })?.Results)
-    ? (data as { Results: unknown[] }).Results[0]
-    : data;
-
-  if (!firstResult || typeof firstResult !== 'object') {
-    return null;
-  }
-
-  return pickNumber(firstResult as Record<string, unknown>, [
-    'id',
-    'Id',
-    'constituentId',
-    'ConstituentId',
-    'accountId',
-    'AccountId',
-  ]);
-}
-
 function buildMemberName(member: Record<string, unknown>, fallbackId: number) {
   const fullName = pickString(member, ['fullName', 'FullName']);
 
@@ -425,18 +332,6 @@ function buildMemberName(member: Record<string, unknown>, fallbackId: number) {
   const joined = `${first} ${last}`.trim();
 
   return joined || `Constituent ${fallbackId}`;
-}
-
-function pickNumber(source: Record<string, unknown>, keys: string[]): number | null {
-  for (const key of keys) {
-    const value = readValue(source, key);
-    const numeric = typeof value === 'number' ? value : Number(value);
-    if (Number.isFinite(numeric)) {
-      return numeric;
-    }
-  }
-
-  return null;
 }
 
 function pickString(source: Record<string, unknown>, keys: string[]): string | undefined {
