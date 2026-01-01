@@ -228,7 +228,15 @@ export default function SearchPage() {
                 ) : result.householdError ? (
                   <p className={styles.muted}>{result.householdError}</p>
                 ) : members.length === 1 ? (
-                  <p className={styles.muted}>Single-person household; using constituent directly.</p>
+                  (() => {
+                    const onlyMember = members[0];
+                    const name =
+                      onlyMember.constituent && typeof onlyMember.constituent === 'object'
+                        ? buildMemberName(onlyMember.constituent, onlyMember.constituentId)
+                        : `Constituent ${onlyMember.constituentId}`;
+
+                    return <p className={styles.muted}>{name}</p>;
+                  })()
                 ) : (
                   <p className={styles.muted}>No household data found.</p>
                 )
