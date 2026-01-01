@@ -280,10 +280,23 @@
   box-shadow: 0 6px 14px rgba(0, 0, 0, 0.04);
 }
 
+.memberHeader {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
 .memberName {
   font-weight: 800;
   color: #1f2937;
   margin-bottom: 6px;
+}
+
+.memberActions {
+  margin-left: auto;
+  display: flex;
+  gap: 6px;
+  align-items: center;
 }
 
 .memberMeta {
@@ -408,4 +421,217 @@
 .notesMeta {
   color: #556987;
   font-size: 13px;
+}
+
+.actionButton {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  color: #0f172a;
+  border-radius: 8px;
+  padding: 6px;
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.1s ease;
+}
+
+.actionButton:hover:not(:disabled) {
+  border-color: #cbd5e1;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.06);
+  transform: translateY(-1px);
+}
+
+.actionButton:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+
+.actionButtonDisabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.actionButtonHighlight {
+  animation: highlightPulse 1s ease;
+  border-color: #34d399;
+  box-shadow: 0 0 0 4px rgba(52, 211, 153, 0.2);
+}
+
+@keyframes highlightPulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.35);
+  }
+  100% {
+    box-shadow: 0 0 0 12px rgba(52, 211, 153, 0);
+  }
+}
+
+.modalOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  z-index: 20;
+}
+
+.modal {
+  background: #ffffff;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  max-width: 620px;
+  width: min(620px, 100%);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.12);
+}
+
+.modalHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px 18px 10px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.modalTitle {
+  margin: 0;
+  font-size: 20px;
+  color: #0f172a;
+}
+
+.modalSubtitle {
+  margin: 4px 0 0;
+  color: #475569;
+}
+
+.modalCloseButton {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  width: 32px;
+  height: 32px;
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.modalCloseButton:hover {
+  background: #eef2f6;
+}
+
+.modalBody {
+  padding: 16px 18px 18px;
+}
+
+.modalForm {
+  display: grid;
+  gap: 12px;
+}
+
+.fieldLabel {
+  display: block;
+  font-weight: 700;
+  margin-bottom: 4px;
+  color: #1f2937;
+}
+
+.input,
+.select,
+.textarea {
+  width: 100%;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 15px;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.input:focus,
+.select:focus,
+.textarea:focus {
+  outline: none;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+}
+
+.textarea {
+  min-height: 96px;
+  resize: vertical;
+}
+
+.inlineRow {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+}
+
+.checkboxRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.modalActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.primaryButton {
+  background: #2563eb;
+  color: #ffffff;
+  border: none;
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.2s ease, box-shadow 0.2s ease;
+}
+
+.primaryButton:hover:not(:disabled) {
+  background: #1d4ed8;
+  box-shadow: 0 8px 18px rgba(37, 99, 235, 0.25);
+}
+
+.primaryButton:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.secondaryButton {
+  background: #f8fafc;
+  color: #0f172a;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.secondaryButton:hover:not(:disabled) {
+  background: #eef2f6;
+}
+
+.errorText {
+  color: #dc2626;
+  font-weight: 600;
+}
+
+.toast {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  background: #0f172a;
+  color: #ffffff;
+  padding: 12px 14px;
+  border-radius: 10px;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.15);
+  z-index: 30;
+  font-weight: 700;
 }
