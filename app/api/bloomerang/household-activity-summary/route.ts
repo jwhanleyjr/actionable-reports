@@ -338,19 +338,48 @@ async function summarizeWithOpenAI(inputs: SummaryInputs): Promise<
 
   try {
     const parsed = JSON.parse(content) as Partial<ActivitySummary>;
+    const safeSummary = sanitizeSummary(parsed, inputs);
+
     return {
       ok: true,
-      summary: {
-        keyPoints: parsed.keyPoints ?? [],
-        recentTimeline: parsed.recentTimeline ?? [],
-        lastMeaningfulInteraction: parsed.lastMeaningfulInteraction ?? { date: null, channel: null, summary: null },
-        suggestedNextSteps: parsed.suggestedNextSteps ?? [],
-        recommendedOpeningLine: buildRecommendedOpeningLine(inputs, parsed.recommendedOpeningLine),
-      },
+      summary: safeSummary,
     };
   } catch (error) {
     return { ok: false, status: 502, error: 'Failed to parse OpenAI response.' };
   }
+}
+
+function sanitizeSummary(summary: Partial<ActivitySummary>, inputs: SummaryInputs): ActivitySummary {
+  const toStrings = (value: unknown) =>
+    Array.isArray(value)
+      ? value
+        .map((item) => (typeof item === 'string' ? item.trim() : typeof item === 'number' ? String(item) : null))
+        .filter((item): item is string => Boolean(item))
+      : [];
+
+  const safeLastMeaningful: ActivitySummary['lastMeaningfulInteraction'] = {
+    date: typeof summary.lastMeaningfulInteraction?.date === 'string'
+      ? summary.lastMeaningfulInteraction.date
+      : null,
+    channel: typeof summary.lastMeaningfulInteraction?.channel === 'string'
+      ? summary.lastMeaningfulInteraction.channel
+      : null,
+    summary: typeof summary.lastMeaningfulInteraction?.summary === 'string'
+      ? summary.lastMeaningfulInteraction.summary
+      : null,
+  };
+
+  const opener = typeof summary.recommendedOpeningLine === 'string'
+    ? summary.recommendedOpeningLine
+    : null;
+
+  return {
+    keyPoints: toStrings(summary.keyPoints),
+    recentTimeline: toStrings(summary.recentTimeline),
+    lastMeaningfulInteraction: safeLastMeaningful,
+    suggestedNextSteps: toStrings(summary.suggestedNextSteps),
+    recommendedOpeningLine: buildRecommendedOpeningLine(inputs, opener),
+  };
 }
 
 async function safeReadBodyPreview(response: Response) {
