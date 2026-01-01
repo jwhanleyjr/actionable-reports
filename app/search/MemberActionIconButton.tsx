@@ -14,11 +14,17 @@ type Props = {
 
 export function MemberActionIconButton({ action, onClick, ariaLabel, highlighted }: Props) {
   const disabled = !action.enabled;
+  const variantClassName =
+    action.key === 'interaction'
+      ? styles.actionButtonInteraction
+      : action.key === 'note'
+        ? styles.actionButtonNote
+        : styles.actionButtonTask;
 
   return (
     <button
       type="button"
-      className={`${styles.actionButton}${disabled ? ` ${styles.actionButtonDisabled}` : ''}${highlighted ? ` ${styles.actionButtonHighlight}` : ''}`}
+      className={`${styles.actionButton} ${variantClassName}${disabled ? ` ${styles.actionButtonDisabled}` : ''}${highlighted ? ` ${styles.actionButtonHighlight}` : ''}`}
       onClick={disabled ? undefined : onClick}
       aria-label={ariaLabel ?? action.label}
       title={action.tooltip}
