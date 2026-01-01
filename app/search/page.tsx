@@ -199,7 +199,7 @@ export default function SearchPage() {
   const householdTotals = result?.householdTotals ?? null;
   const householdStatus = result?.householdStatus ?? null;
   const memberActions = getMemberActions({ enableNote: true });
-  const visibleActions = memberActions.filter((action) => action.enabled && (action.key === 'note' || action.key === 'interaction'));
+  const visibleActions = memberActions.filter((action) => action.key === 'note' || action.key === 'interaction');
 
   const resetInteractionForm = () => {
     setInteractionChannel('Phone');
