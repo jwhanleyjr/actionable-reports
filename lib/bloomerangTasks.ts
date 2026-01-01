@@ -172,7 +172,7 @@ function normalizeTask(entry: unknown): BloomerangTask | null {
   }
 
   return {
-    id,
+    id: id as number,
     accountId: Number.isFinite(accountId) ? (accountId as number) : null,
     dueDate,
     subject: subject ?? null,

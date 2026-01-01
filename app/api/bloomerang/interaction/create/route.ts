@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-import { getBloomerangBaseUrl } from '../../../../lib/bloomerangBase';
+import { getBloomerangBaseUrl } from '../../../../../lib/bloomerangBase';
 import { buildHeaders, getApiKey } from '../../utils';
 
 type InteractionPayload = {

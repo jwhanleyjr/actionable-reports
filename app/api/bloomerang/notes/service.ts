@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { getBloomerangBaseUrl } from '../../../lib/bloomerangBase';
+import { getBloomerangBaseUrl } from '../../../../lib/bloomerangBase';
 import { fetchJsonWithModes, pickString, readValue } from '../utils';
 
 export type HouseholdNote = {
