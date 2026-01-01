@@ -315,6 +315,38 @@
   font-size: 13px;
 }
 
+.metaLink {
+  color: inherit;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.metaLink:hover {
+  text-decoration: underline;
+}
+
+.metaActionButton {
+  background: #1e83b5;
+  color: #ffffff;
+  border: none;
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.2s ease, transform 0.1s ease;
+  box-shadow: 0 6px 12px rgba(30, 131, 181, 0.25);
+}
+
+.metaActionButton:hover {
+  background: #16648a;
+  transform: translateY(-1px);
+}
+
+.metaActionButton:active {
+  transform: translateY(0);
+}
+
 .summaryGrid {
   display: grid;
   gap: 10px;

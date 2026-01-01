@@ -116,6 +116,7 @@ export default function SearchPage() {
   const [noteText, setNoteText] = useState('');
   const [noteError, setNoteError] = useState<string | null>(null);
   const [noteSubmitting, setNoteSubmitting] = useState(false);
+  const [bccEmail, setBccEmail] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [recentlyLogged, setRecentlyLogged] = useState<{ memberId: number; action: MemberActionKey; ts: number } | null>(null);
   const [taskActionRequest, setTaskActionRequest] = useState<{ memberId: number; action: 'create'; ts: number } | null>(null);
@@ -252,6 +253,52 @@ export default function SearchPage() {
     setToastMessage(message);
     setTimeout(() => setToastMessage(null), 3000);
   };
+
+  const copyBccToClipboard = async () => {
+    if (!bccEmail) {
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(bccEmail);
+      showToast('Bloomerang BCC copied');
+    } catch (error) {
+      console.error('Failed to copy Bloomerang BCC', error);
+      showToast('Unable to copy BCC');
+    }
+  };
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadCurrentUser = async () => {
+      try {
+        const response = await fetch('/api/bloomerang/user/current');
+        const payload = await response.json() as { ok?: boolean; user?: { bccEmail?: string | null } };
+
+        if (!isMounted) {
+          return;
+        }
+
+        if (response.ok && payload.ok && payload.user) {
+          setBccEmail(payload.user.bccEmail ?? null);
+        } else {
+          setBccEmail(null);
+        }
+      } catch (error) {
+        console.error('Failed to load Bloomerang user', error);
+        if (isMounted) {
+          setBccEmail(null);
+        }
+      }
+    };
+
+    void loadCurrentUser();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const markRecentlyLogged = (memberId: number, action: MemberActionKey) => {
     setRecentlyLogged({ memberId, action, ts: Date.now() });
@@ -606,6 +653,17 @@ export default function SearchPage() {
                       'primaryEmail.Value',
                       'PrimaryEmail.value',
                     ]) : undefined;
+                    const emailLink = email ? (() => {
+                      const params = new URLSearchParams();
+
+                      if (bccEmail) {
+                        params.set('bcc', bccEmail);
+                      }
+
+                      params.set('subject', 'Quick follow up');
+
+                      return `mailto:${encodeURIComponent(email)}?${params.toString()}`;
+                    })() : null;
 
                     return (
                       <li key={member.constituentId} className={styles.memberItem}>
@@ -626,7 +684,28 @@ export default function SearchPage() {
                         <div className={styles.memberMeta}>
                           <span className={styles.metaPill}>ID: {member.constituentId}</span>
                           {phone && <span className={styles.metaPill}>Phone: {phone}</span>}
-                          {email && <span className={styles.metaPill}>Email: {email}</span>}
+                          {email ? (
+                            <span className={styles.metaPill}>
+                              Email:{' '}
+                              <a
+                                href={emailLink ?? `mailto:${encodeURIComponent(email)}`}
+                                className={styles.metaLink}
+                                title={bccEmail ? `BCC will log to Bloomerang: ${bccEmail}` : 'Email'}
+                              >
+                                {email}
+                              </a>
+                            </span>
+                          ) : null}
+                          {email && bccEmail ? (
+                            <button
+                              type="button"
+                              className={styles.metaActionButton}
+                              onClick={copyBccToClipboard}
+                              title={`Copy Bloomerang BCC: ${bccEmail}`}
+                            >
+                              Copy BCC
+                            </button>
+                          ) : null}
                         </div>
                         {member.stats ? (
                           <div className={styles.statsTable}>
