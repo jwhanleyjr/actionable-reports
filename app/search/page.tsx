@@ -2,6 +2,9 @@
 
 import { FormEvent, useEffect, useState } from 'react';
 
+import { getMemberActions, type MemberActionKey } from '../../lib/memberActions';
+import { MemberActionIconButton } from './MemberActionIconButton';
+import { MemberActionModalShell } from './MemberActionModalShell';
 import styles from './styles.module.css';
 
 type GivingStats = {
@@ -89,6 +92,23 @@ export default function SearchPage() {
   const [loading, setLoading] = useState(false);
   const [activitySummary, setActivitySummary] = useState<ActivitySummary | null>(null);
   const [activityLoading, setActivityLoading] = useState(false);
+  const [interactionModalMember, setInteractionModalMember] = useState<MemberWithStats | null>(null);
+  const [noteModalMember, setNoteModalMember] = useState<MemberWithStats | null>(null);
+  const [interactionChannel, setInteractionChannel] = useState('Phone');
+  const [interactionPurpose, setInteractionPurpose] = useState('Acknowledgement');
+  const [interactionCustomPurpose, setInteractionCustomPurpose] = useState('');
+  const [interactionSubject, setInteractionSubject] = useState('Interaction');
+  const [interactionDate, setInteractionDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [interactionInbound, setInteractionInbound] = useState(false);
+  const [interactionNote, setInteractionNote] = useState('');
+  const [interactionError, setInteractionError] = useState<string | null>(null);
+  const [interactionSubmitting, setInteractionSubmitting] = useState(false);
+  const [noteDate, setNoteDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [noteText, setNoteText] = useState('');
+  const [noteError, setNoteError] = useState<string | null>(null);
+  const [noteSubmitting, setNoteSubmitting] = useState(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [recentlyLogged, setRecentlyLogged] = useState<{ memberId: number; action: MemberActionKey; ts: number } | null>(null);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -178,6 +198,168 @@ export default function SearchPage() {
   const members = result?.members ?? [];
   const householdTotals = result?.householdTotals ?? null;
   const householdStatus = result?.householdStatus ?? null;
+  const memberActions = getMemberActions({ enableNote: true });
+  const visibleActions = memberActions.filter((action) => action.key === 'note' || action.key === 'interaction');
+
+  const resetInteractionForm = () => {
+    setInteractionChannel('Phone');
+    setInteractionPurpose('Acknowledgement');
+    setInteractionCustomPurpose('');
+    setInteractionSubject('Interaction');
+    setInteractionDate(new Date().toISOString().split('T')[0]);
+    setInteractionInbound(false);
+    setInteractionNote('');
+    setInteractionError(null);
+    setInteractionSubmitting(false);
+  };
+
+  const openInteractionModal = (member: MemberWithStats) => {
+    resetInteractionForm();
+    setInteractionModalMember(member);
+  };
+
+  const closeInteractionModal = () => {
+    setInteractionModalMember(null);
+  };
+
+  const resetNoteForm = () => {
+    setNoteDate(new Date().toISOString().split('T')[0]);
+    setNoteText('');
+    setNoteError(null);
+    setNoteSubmitting(false);
+  };
+
+  const openNoteModal = (member: MemberWithStats) => {
+    resetNoteForm();
+    setNoteModalMember(member);
+  };
+
+  const closeNoteModal = () => {
+    setNoteModalMember(null);
+  };
+
+  const showToast = (message: string) => {
+    setToastMessage(message);
+    setTimeout(() => setToastMessage(null), 3000);
+  };
+
+  const handleInteractionSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    if (!interactionModalMember) {
+      return;
+    }
+
+    setInteractionError(null);
+    setInteractionSubmitting(true);
+
+    const purposeValue = interactionPurpose === 'Other'
+      ? (interactionCustomPurpose.trim() || 'Other')
+      : interactionPurpose;
+
+    try {
+      const response = await fetch('/api/bloomerang/interaction/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          accountId: interactionModalMember.constituentId,
+          channel: interactionChannel,
+          purpose: purposeValue,
+          subject: interactionSubject?.trim() || null,
+          date: interactionDate,
+          isInbound: interactionInbound,
+          note: interactionNote,
+        }),
+      });
+
+      const result = await response.json() as { ok?: boolean; bodyPreview?: string; error?: string };
+
+      if (!response.ok || !result.ok) {
+        setInteractionError(result.bodyPreview || result.error || 'Unable to log interaction.');
+        return;
+      }
+
+      const firstName = getMemberFirstName(
+        interactionModalMember.constituent ?? {},
+        interactionModalMember.constituentId,
+      );
+
+      showToast(`Interaction logged for ${firstName}`);
+      closeInteractionModal();
+      setRecentlyLogged({ memberId: interactionModalMember.constituentId, action: 'interaction', ts: Date.now() });
+      setTimeout(() => setRecentlyLogged(null), 1000);
+    } catch (error) {
+      console.error('Interaction creation failed', error);
+      setInteractionError('Unable to log interaction.');
+    } finally {
+      setInteractionSubmitting(false);
+    }
+  };
+
+  const handleNoteSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    if (!noteModalMember) {
+      return;
+    }
+
+    setNoteError(null);
+    setNoteSubmitting(true);
+
+    const trimmedNote = noteText.trim();
+
+    if (!trimmedNote) {
+      setNoteError('Please enter a note.');
+      setNoteSubmitting(false);
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/bloomerang/note/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          accountId: noteModalMember.constituentId,
+          date: noteDate,
+          note: trimmedNote,
+        }),
+      });
+
+      const result = await response.json() as { ok?: boolean; bodyPreview?: string; error?: string; status?: number };
+
+      const status = result.status ?? response.status;
+      const preview = result.bodyPreview || result.error || 'Unable to save note.';
+
+      if (!response.ok || !result.ok) {
+        setNoteError(status ? `Status ${status}: ${preview}` : preview);
+        return;
+      }
+
+      const firstName = getMemberFirstName(noteModalMember.constituent ?? {}, noteModalMember.constituentId);
+
+      showToast(`Note saved for ${firstName}`);
+      closeNoteModal();
+      setRecentlyLogged({ memberId: noteModalMember.constituentId, action: 'note', ts: Date.now() });
+      setTimeout(() => setRecentlyLogged(null), 1000);
+      void loadActivitySummary(true);
+    } catch (error) {
+      console.error('Note creation failed', error);
+      setNoteError('Unable to save note.');
+    } finally {
+      setNoteSubmitting(false);
+    }
+  };
+
+  const handleActionClick = (actionKey: MemberActionKey, member: MemberWithStats) => {
+    if (actionKey === 'interaction') {
+      openInteractionModal(member);
+      return;
+    }
+
+    if (actionKey === 'note') {
+      openNoteModal(member);
+    }
+  };
 
   return (
     <main className={styles.page}>
@@ -408,7 +590,20 @@ export default function SearchPage() {
 
                     return (
                       <li key={member.constituentId} className={styles.memberItem}>
-                        <div className={styles.memberName}>{name}</div>
+                        <div className={styles.memberHeader}>
+                          <div className={styles.memberName}>{name}</div>
+                          <div className={styles.memberActions}>
+                            {visibleActions.map((action) => (
+                              <MemberActionIconButton
+                                key={action.key}
+                                action={action}
+                                ariaLabel={`${action.label} for ${name}`}
+                                highlighted={recentlyLogged?.memberId === member.constituentId && recentlyLogged?.action === action.key}
+                                onClick={() => handleActionClick(action.key, member)}
+                              />
+                            ))}
+                          </div>
+                        </div>
                         <div className={styles.memberMeta}>
                           <span className={styles.metaPill}>ID: {member.constituentId}</span>
                           {phone && <span className={styles.metaPill}>Phone: {phone}</span>}
@@ -448,6 +643,163 @@ export default function SearchPage() {
           </div>
         </div>
       </div>
+
+      {noteModalMember ? (
+        <MemberActionModalShell
+          title={`Add note for: ${buildMemberName(
+            noteModalMember.constituent ?? {},
+            noteModalMember.constituentId,
+          )}`}
+          onClose={closeNoteModal}
+        >
+          <form className={styles.modalForm} onSubmit={handleNoteSubmit}>
+            <div className={styles.inlineRow}>
+              <div>
+                <label className={styles.fieldLabel} htmlFor="note-date">Date</label>
+                <input
+                  id="note-date"
+                  type="date"
+                  className={styles.input}
+                  value={noteDate}
+                  onChange={(event) => setNoteDate(event.target.value)}
+                  required
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className={styles.fieldLabel} htmlFor="note-text">Note</label>
+              <textarea
+                id="note-text"
+                className={styles.textarea}
+                value={noteText}
+                onChange={(event) => setNoteText(event.target.value)}
+                required
+              />
+            </div>
+
+            {noteError ? <p className={styles.errorText}>{noteError}</p> : null}
+
+            <div className={styles.modalActions}>
+              <button type="button" className={styles.secondaryButton} onClick={closeNoteModal} disabled={noteSubmitting}>
+                Cancel
+              </button>
+              <button type="submit" className={styles.primaryButton} disabled={noteSubmitting}>
+                {noteSubmitting ? 'Saving…' : 'Save Note'}
+              </button>
+            </div>
+          </form>
+        </MemberActionModalShell>
+      ) : null}
+
+      {interactionModalMember ? (
+        <MemberActionModalShell
+          title="Log Interaction"
+          subtitle={`Record an interaction for ${buildMemberName(
+            interactionModalMember.constituent ?? {},
+            interactionModalMember.constituentId,
+          )}.`}
+          onClose={closeInteractionModal}
+        >
+          <form className={styles.modalForm} onSubmit={handleInteractionSubmit}>
+            <div className={styles.inlineRow}>
+              <div>
+                <label className={styles.fieldLabel} htmlFor="interaction-channel">Channel</label>
+                <select
+                  id="interaction-channel"
+                  className={styles.select}
+                  value={interactionChannel}
+                  onChange={(event) => setInteractionChannel(event.target.value)}
+                >
+                  <option value="Phone">Phone</option>
+                  <option value="Email">Email</option>
+                  <option value="Text">Text</option>
+                  <option value="In Person">In Person</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
+              <div>
+                <label className={styles.fieldLabel} htmlFor="interaction-purpose">Purpose</label>
+                <select
+                  id="interaction-purpose"
+                  className={styles.select}
+                  value={interactionPurpose}
+                  onChange={(event) => setInteractionPurpose(event.target.value)}
+                >
+                  <option value="Acknowledgement">Acknowledgement</option>
+                  <option value="ImpactCultivation">ImpactCultivation</option>
+                  <option value="Other">Other</option>
+                </select>
+                {interactionPurpose === 'Other' ? (
+                  <input
+                    type="text"
+                    className={styles.input}
+                    placeholder="Custom purpose"
+                    value={interactionCustomPurpose}
+                    onChange={(event) => setInteractionCustomPurpose(event.target.value)}
+                  />
+                ) : null}
+              </div>
+            </div>
+
+            <div className={styles.inlineRow}>
+              <div>
+                <label className={styles.fieldLabel} htmlFor="interaction-subject">Subject (optional)</label>
+                <input
+                  id="interaction-subject"
+                  type="text"
+                  className={styles.input}
+                  value={interactionSubject}
+                  onChange={(event) => setInteractionSubject(event.target.value)}
+                />
+              </div>
+              <div>
+                <label className={styles.fieldLabel} htmlFor="interaction-date">Date</label>
+                <input
+                  id="interaction-date"
+                  type="date"
+                  className={styles.input}
+                  value={interactionDate}
+                  onChange={(event) => setInteractionDate(event.target.value)}
+                />
+              </div>
+            </div>
+
+            <div className={styles.checkboxRow}>
+              <input
+                id="interaction-inbound"
+                type="checkbox"
+                checked={interactionInbound}
+                onChange={(event) => setInteractionInbound(event.target.checked)}
+              />
+              <label htmlFor="interaction-inbound">Inbound interaction</label>
+            </div>
+
+            <div>
+              <label className={styles.fieldLabel} htmlFor="interaction-note">Note</label>
+              <textarea
+                id="interaction-note"
+                className={styles.textarea}
+                value={interactionNote}
+                onChange={(event) => setInteractionNote(event.target.value)}
+              />
+            </div>
+
+            {interactionError ? <p className={styles.errorText}>{interactionError}</p> : null}
+
+            <div className={styles.modalActions}>
+              <button type="button" className={styles.secondaryButton} onClick={closeInteractionModal} disabled={interactionSubmitting}>
+                Cancel
+              </button>
+              <button type="submit" className={styles.primaryButton} disabled={interactionSubmitting}>
+                {interactionSubmitting ? 'Saving…' : 'Log Interaction'}
+              </button>
+            </div>
+          </form>
+        </MemberActionModalShell>
+      ) : null}
+
+      {toastMessage ? <div className={styles.toast}>{toastMessage}</div> : null}
     </main>
   );
 }
@@ -607,6 +959,19 @@ function buildMemberName(member: Record<string, unknown>, fallbackId: number) {
   const joined = `${first} ${last}`.trim();
 
   return joined || `Constituent ${fallbackId}`;
+}
+
+function getMemberFirstName(member: Record<string, unknown>, fallbackId: number) {
+  const first = pickString(member, ['firstName', 'FirstName']);
+
+  if (first) {
+    return first;
+  }
+
+  const fullName = buildMemberName(member, fallbackId);
+  const [firstPiece] = fullName.split(' ');
+
+  return firstPiece || `Constituent ${fallbackId}`;
 }
 
 function pickString(source: Record<string, unknown>, keys: string[]): string | undefined {
