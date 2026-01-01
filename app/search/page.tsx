@@ -4,6 +4,27 @@ import { FormEvent, useState } from 'react';
 
 import styles from './styles.module.css';
 
+type GivingStats = {
+  lifetimeTotal: number;
+  lastYearTotal: number;
+  ytdTotal: number;
+  lastGiftAmount: number | null;
+  lastGiftDate: string | null;
+};
+
+type HouseholdTotals = GivingStats;
+
+type MemberWithStats = {
+  constituent: Record<string, unknown> | null;
+  constituentId: number;
+  stats?: GivingStats;
+  statsDebug?: { transactionCount: number; includedCount: number; requestUrls: string[] };
+  requestUrls?: string[];
+  profileUrl?: string;
+  statsError?: string;
+  constituentError?: string;
+};
+
 type SearchResult = {
   ok: boolean;
   url?: string;
@@ -15,22 +36,23 @@ type SearchResult = {
   message?: string;
 };
 
-type HouseholdMember = {
-  id: number;
-  name: string;
-  phone?: string;
-  email?: string;
+type CombinedSearchResult = {
+  ok: boolean;
+  constituent?: unknown;
+  household?: unknown | null;
+  householdError?: string;
+  members?: MemberWithStats[];
+  householdTotals?: HouseholdTotals;
+  searchUrl?: string;
+  householdUrl?: string;
+  bodyPreview?: string;
+  error?: string;
+  message?: string;
 };
 
 export default function SearchPage() {
   const [accountNumber, setAccountNumber] = useState('');
-  const [result, setResult] = useState<SearchResult | null>(null);
-  const [householdResult, setHouseholdResult] = useState<SearchResult | null>(null);
-  const [householdError, setHouseholdError] = useState<string | null>(null);
-  const [members, setMembers] = useState<HouseholdMember[]>([]);
-  const [singlePersonHousehold, setSinglePersonHousehold] = useState(false);
-  const [constituentName, setConstituentName] = useState<string | null>(null);
-  const [searchedAccountNumber, setSearchedAccountNumber] = useState('');
+  const [result, setResult] = useState<CombinedSearchResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -38,12 +60,6 @@ export default function SearchPage() {
     event.preventDefault();
     setError(null);
     setResult(null);
-    setHouseholdResult(null);
-    setHouseholdError(null);
-    setMembers([]);
-    setSinglePersonHousehold(false);
-    setConstituentName(null);
-    setSearchedAccountNumber('');
 
     const trimmed = accountNumber.trim();
     if (!trimmed) {
@@ -51,11 +67,10 @@ export default function SearchPage() {
       return;
     }
 
-    setSearchedAccountNumber(trimmed);
-
     setLoading(true);
+
     try {
-      const response = await fetch('/api/bloomerang/search', {
+      const response = await fetch('/api/bloomerang/search-with-household-and-stats', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -63,64 +78,15 @@ export default function SearchPage() {
         body: JSON.stringify({ accountNumber: trimmed }),
       });
 
-      const payload = (await response.json()) as SearchResult;
+      const payload = (await response.json()) as CombinedSearchResult;
 
       if (!response.ok || !payload.ok) {
         setError(payload.bodyPreview || payload.error || 'Search failed.');
+        setResult(payload);
         return;
       }
 
       setResult(payload);
-
-      setConstituentName(extractConstituentName(payload.data));
-
-      const isInHousehold = extractIsInHousehold(payload.data);
-
-      if (isInHousehold === false) {
-        setSinglePersonHousehold(true);
-        return;
-      }
-
-      const householdId = extractHouseholdId(payload.data);
-
-      if (!householdId) {
-        setHouseholdError('No HouseholdId on this constituent.');
-        return;
-      }
-
-      const householdResponse = await fetch('/api/bloomerang/household', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ householdId }),
-      });
-
-      const householdPayload = (await householdResponse.json()) as SearchResult;
-
-      setHouseholdResult(householdPayload);
-
-      if (!householdResponse.ok || !householdPayload.ok) {
-        setHouseholdError(householdPayload.bodyPreview || householdPayload.error || 'Household lookup failed.');
-        return;
-      }
-
-      const memberDetailsFromHousehold = extractMembers(householdPayload.data);
-
-      if (memberDetailsFromHousehold.length) {
-        setMembers(memberDetailsFromHousehold);
-        return;
-      }
-
-      const memberIds = extractMemberIds(householdPayload.data);
-
-      if (!memberIds.length) {
-        setMembers([]);
-        return;
-      }
-
-      const fetchedMembers = await fetchMembersByIds(memberIds);
-      setMembers(fetchedMembers);
     } catch (err) {
       console.error('Search request failed', err);
       setError('Unable to complete the search request.');
@@ -128,6 +94,9 @@ export default function SearchPage() {
       setLoading(false);
     }
   };
+
+  const members = result?.members ?? [];
+  const householdTotals = result?.householdTotals ?? null;
 
   return (
     <main className={styles.page}>
@@ -144,7 +113,7 @@ export default function SearchPage() {
             <p className={styles.kicker}>Campaign Workspace</p>
             <h1 className={styles.title}>Bloomerang Search Tester</h1>
             <p className={styles.subtitle}>
-              Enter an account number to query Bloomerang and review the raw search response.
+              Enter an account number to query Bloomerang and review the household profile with giving stats.
             </p>
           </header>
 
@@ -174,47 +143,46 @@ export default function SearchPage() {
 
           <div className={styles.outputStack}>
             <div className={styles.output}>
-              <p className={styles.outputLabel}>Constituent Search</p>
+              <p className={styles.outputLabel}>Household</p>
               {loading ? (
                 <p className={styles.muted}>Loading…</p>
               ) : result ? (
-                <ul className={styles.memberList}>
-                  <li className={styles.memberItem}>
-                    <div className={styles.memberName}>Account Number</div>
-                    <div className={styles.memberMeta}>
-                      <span className={styles.metaPill}>{searchedAccountNumber}</span>
-                    </div>
-                  </li>
-                  <li className={styles.memberItem}>
-                    <div className={styles.memberName}>Constituent ID</div>
-                    <div className={styles.memberMeta}>
-                      <span className={styles.metaPill}>{extractConstituentId(result.data) ?? 'Not found'}</span>
-                    </div>
-                  </li>
-                </ul>
+                result.household ? (
+                  <p className={styles.muted}>
+                    {extractHouseholdName(result.household) ?? 'No household name found.'}
+                  </p>
+                ) : result.householdError ? (
+                  <p className={styles.muted}>{result.householdError}</p>
+                ) : members.length === 1 ? (
+                  <p className={styles.muted}>Single-person household; using constituent directly.</p>
+                ) : (
+                  <p className={styles.muted}>No household data found.</p>
+                )
               ) : (
-                <p className={styles.muted}>Submit a search to see results here.</p>
+                <p className={styles.muted}>Search for a constituent to load household info.</p>
               )}
             </div>
 
             <div className={styles.output}>
-              <p className={styles.outputLabel}>Household</p>
+              <p className={styles.outputLabel}>Household Giving Summary</p>
               {loading ? (
                 <p className={styles.muted}>Loading…</p>
-              ) : householdError ? (
-                <p className={styles.muted}>{householdError}</p>
-              ) : singlePersonHousehold ? (
-                constituentName ? (
-                  <p className={styles.muted}>{constituentName}</p>
-                ) : (
-                  <p className={styles.muted}>Single-person household; skipping household lookup.</p>
-                )
-              ) : householdResult ? (
-                <p className={styles.muted}>
-                  {extractHouseholdName(householdResult.data) ?? 'No household name found.'}
-                </p>
+              ) : householdTotals ? (
+                <div className={styles.summaryGrid}>
+                  <SummaryStat label="Lifetime Total" value={formatCurrency(householdTotals.lifetimeTotal)} />
+                  <SummaryStat label="Last Year Total" value={formatCurrency(householdTotals.lastYearTotal)} />
+                  <SummaryStat label="YTD Total" value={formatCurrency(householdTotals.ytdTotal)} />
+                  <SummaryStat
+                    label="Last Gift"
+                    value={householdTotals.lastGiftDate
+                      ? `${formatCurrency(householdTotals.lastGiftAmount ?? 0)} on ${formatDate(householdTotals.lastGiftDate)}`
+                      : 'No gifts found'}
+                  />
+                </div>
+              ) : result ? (
+                <p className={styles.muted}>No giving data available.</p>
               ) : (
-                <p className={styles.muted}>Search for a constituent to load household info.</p>
+                <p className={styles.muted}>Search for a constituent to see totals.</p>
               )}
             </div>
 
@@ -222,35 +190,59 @@ export default function SearchPage() {
               <p className={styles.outputLabel}>Household Members</p>
               {loading ? (
                 <p className={styles.muted}>Loading…</p>
-              ) : householdError ? (
-                <p className={styles.muted}>{householdError}</p>
-              ) : singlePersonHousehold ? (
-                constituentName ? (
-                  <ul className={styles.memberList}>
-                    <li className={styles.memberItem} key="single-person-household">
-                      <div className={styles.memberName}>{constituentName}</div>
-                      <div className={styles.memberMeta}>
-                        <span className={styles.metaPill}>Single-member household</span>
-                      </div>
-                    </li>
-                  </ul>
-                ) : (
-                  <p className={styles.muted}>Single-person household; no additional members.</p>
-                )
               ) : members.length ? (
                 <ul className={styles.memberList}>
-                  {members.map((member) => (
-                    <li key={member.id} className={styles.memberItem}>
-                      <div className={styles.memberName}>{member.name}</div>
-                      <div className={styles.memberMeta}>
-                        <span className={styles.metaPill}>ID: {member.id}</span>
-                        {member.phone && <span className={styles.metaPill}>Phone: {member.phone}</span>}
-                        {member.email && <span className={styles.metaPill}>Email: {member.email}</span>}
-                      </div>
-                    </li>
-                  ))}
+                  {members.map((member) => {
+                    const name = member.constituent
+                      ? buildMemberName(member.constituent, member.constituentId)
+                      : `Constituent ${member.constituentId}`;
+                    const phone = member.constituent ? pickString(member.constituent, [
+                      'PrimaryPhone.Number',
+                      'primaryPhone.number',
+                      'primaryPhone.Number',
+                      'PrimaryPhone.number',
+                    ]) : undefined;
+                    const email = member.constituent ? pickString(member.constituent, [
+                      'PrimaryEmail.Value',
+                      'primaryEmail.value',
+                      'primaryEmail.Value',
+                      'PrimaryEmail.value',
+                    ]) : undefined;
+
+                    return (
+                      <li key={member.constituentId} className={styles.memberItem}>
+                        <div className={styles.memberName}>{name}</div>
+                        <div className={styles.memberMeta}>
+                          <span className={styles.metaPill}>ID: {member.constituentId}</span>
+                          {phone && <span className={styles.metaPill}>Phone: {phone}</span>}
+                          {email && <span className={styles.metaPill}>Email: {email}</span>}
+                        </div>
+                        {member.stats ? (
+                          <div className={styles.statsTable}>
+                            <StatsRow label="Lifetime" value={formatCurrency(member.stats.lifetimeTotal)} />
+                            <StatsRow label="Last Year" value={formatCurrency(member.stats.lastYearTotal)} />
+                            <StatsRow label="YTD" value={formatCurrency(member.stats.ytdTotal)} />
+                            <StatsRow
+                              label="Last Gift Amount"
+                              value={member.stats.lastGiftAmount !== null
+                                ? formatCurrency(member.stats.lastGiftAmount)
+                                : '—'}
+                            />
+                            <StatsRow
+                              label="Last Gift Date"
+                              value={member.stats.lastGiftDate ? formatDate(member.stats.lastGiftDate) : '—'}
+                            />
+                          </div>
+                        ) : (
+                          <p className={styles.muted}>
+                            Stats unavailable{member.statsError ? `: ${member.statsError}` : ''}
+                          </p>
+                        )}
+                      </li>
+                    );
+                  })}
                 </ul>
-              ) : householdResult ? (
+              ) : result ? (
                 <p className={styles.muted}>No household members returned.</p>
               ) : (
                 <p className={styles.muted}>Search for a constituent to see their household members.</p>
@@ -263,43 +255,31 @@ export default function SearchPage() {
   );
 }
 
-async function fetchMembersByIds(memberIds: number[]): Promise<HouseholdMember[]> {
-  const responses = await Promise.all(memberIds.map(async (id) => {
-    try {
-      const response = await fetch('/api/bloomerang/constituent', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ constituentId: id }),
-      });
-
-      const payload = (await response.json()) as SearchResult;
-
-      if (!response.ok || !payload.ok) {
-        return null;
-      }
-
-      return buildMemberFromConstituentPayload(payload.data);
-    } catch (error) {
-      console.error('Failed to fetch member', { id, error });
-      return null;
-    }
-  }));
-
-  return responses.filter((member): member is HouseholdMember => !!member);
+function SummaryStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className={styles.summaryCard}>
+      <p className={styles.summaryLabel}>{label}</p>
+      <p className={styles.summaryValue}>{value}</p>
+    </div>
+  );
 }
 
-function extractHouseholdId(data: unknown): number | null {
-  const firstResult = Array.isArray((data as { Results?: unknown[] })?.Results)
-    ? (data as { Results: unknown[] }).Results[0]
-    : null;
+function StatsRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className={styles.statRow}>
+      <span className={styles.statLabel}>{label}</span>
+      <span className={styles.statValue}>{value}</span>
+    </div>
+  );
+}
 
-  const value = (firstResult as { HouseholdId?: unknown; householdId?: unknown } | null)?.HouseholdId
-    ?? (firstResult as { householdId?: unknown } | null)?.householdId;
+function formatCurrency(amount: number) {
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
+}
 
-  const id = typeof value === 'number' ? value : Number(value);
-  return Number.isFinite(id) ? id : null;
+function formatDate(value: string) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString();
 }
 
 function extractHouseholdName(data: unknown): string | null {
@@ -340,229 +320,6 @@ function extractHouseholdName(data: unknown): string | null {
   return null;
 }
 
-function extractIsInHousehold(data: unknown): boolean | null {
-  const firstResult = Array.isArray((data as { Results?: unknown[] })?.Results)
-    ? (data as { Results: unknown[] }).Results[0]
-    : null;
-
-  const value = (firstResult as { IsInHousehold?: unknown; isInHousehold?: unknown } | null)?.IsInHousehold
-    ?? (firstResult as { isInHousehold?: unknown } | null)?.isInHousehold;
-
-  return normalizeBoolean(value);
-}
-
-function extractConstituentName(data: unknown): string | null {
-  const firstResult = Array.isArray((data as { Results?: unknown[] })?.Results)
-    ? (data as { Results: unknown[] }).Results[0]
-    : null;
-
-  if (!firstResult || typeof firstResult !== 'object') {
-    return null;
-  }
-
-  const fromFullName = pickString(firstResult as Record<string, unknown>, ['fullName', 'FullName']);
-  if (fromFullName) {
-    return fromFullName;
-  }
-
-  const first = pickString(firstResult as Record<string, unknown>, ['firstName', 'FirstName']);
-  const last = pickString(firstResult as Record<string, unknown>, ['lastName', 'LastName']);
-  const combined = `${first ?? ''} ${last ?? ''}`.trim();
-
-  if (combined) {
-    return combined;
-  }
-
-  const fallbackId = pickNumber(firstResult as Record<string, unknown>, [
-    'accountNumber',
-    'AccountNumber',
-    'constituentId',
-    'ConstituentId',
-    'id',
-    'Id',
-  ]);
-
-  return fallbackId !== null ? `Constituent ${fallbackId}` : null;
-}
-
-function extractConstituentId(data: unknown): number | null {
-  const firstResult = Array.isArray((data as { Results?: unknown[] })?.Results)
-    ? (data as { Results: unknown[] }).Results[0]
-    : null;
-
-  if (!firstResult || typeof firstResult !== 'object') {
-    return null;
-  }
-
-  return pickNumber(firstResult as Record<string, unknown>, [
-    'id',
-    'Id',
-    'constituentId',
-    'ConstituentId',
-    'accountNumber',
-    'AccountNumber',
-  ]);
-}
-
-function extractMemberIds(data: unknown): number[] {
-  const root = (data as { MemberIds?: unknown; memberIds?: unknown; Results?: unknown[] }) ?? {};
-
-  const gatherIds = (value: unknown): number[] => {
-    if (!Array.isArray(value)) {
-      return [];
-    }
-
-    return value
-      .map((entry) => (typeof entry === 'number' ? entry : Number(entry)))
-      .filter((id): id is number => Number.isFinite(id));
-  };
-
-  const rootIds = gatherIds(root.MemberIds ?? root.memberIds);
-
-  if (rootIds.length) {
-    return rootIds;
-  }
-
-  const firstResult = Array.isArray(root.Results)
-    ? root.Results[0]
-    : null;
-
-  if (firstResult && typeof firstResult === 'object') {
-    return gatherIds((firstResult as { MemberIds?: unknown; memberIds?: unknown }).MemberIds
-      ?? (firstResult as { memberIds?: unknown }).memberIds);
-  }
-
-  return [];
-}
-
-function extractMembers(data: unknown): HouseholdMember[] {
-  const members = getMemberArray(data);
-
-  return members.reduce<HouseholdMember[]>((acc, member) => {
-    const id = pickNumber(member, ['accountId', 'AccountId', 'constituentId', 'ConstituentId']);
-
-    if (!Number.isFinite(id)) {
-      return acc;
-    }
-
-    const name = buildMemberName(member, id as number);
-    const phone = pickString(member, [
-      'PrimaryPhone.Number',
-      'primaryPhone.number',
-      'primaryPhone.Number',
-      'PrimaryPhone.number',
-    ]);
-    const email = pickString(member, [
-      'PrimaryEmail.Value',
-      'primaryEmail.value',
-      'primaryEmail.Value',
-      'PrimaryEmail.value',
-    ]);
-
-    acc.push({ id: id as number, name, phone, email });
-
-    return acc;
-  }, []);
-}
-
-function buildMemberFromConstituentPayload(data: unknown): HouseholdMember | null {
-  const record = normalizeRecord(data);
-
-  if (!record) {
-    return null;
-  }
-
-  const id = pickNumber(record, ['id', 'Id', 'accountNumber', 'AccountNumber', 'constituentId', 'ConstituentId']);
-
-  if (!Number.isFinite(id)) {
-    return null;
-  }
-
-  const name = buildMemberName(record, id as number);
-  const phone = pickString(record, [
-    'PrimaryPhone.Number',
-    'primaryPhone.number',
-    'primaryPhone.Number',
-    'PrimaryPhone.number',
-  ]);
-  const email = pickString(record, [
-    'PrimaryEmail.Value',
-    'primaryEmail.value',
-    'primaryEmail.Value',
-    'PrimaryEmail.value',
-  ]);
-
-  return { id: id as number, name, phone, email };
-}
-
-function getMemberArray(data: unknown): Array<Record<string, unknown>> {
-  const candidate = (data as { members?: unknown; Members?: unknown; Results?: unknown[] }) ?? {};
-  const fromRoot = Array.isArray(candidate.members)
-    ? candidate.members
-    : Array.isArray(candidate.Members)
-      ? candidate.Members
-      : null;
-
-  if (fromRoot) {
-    return fromRoot.filter((value): value is Record<string, unknown> => !!value && typeof value === 'object');
-  }
-
-  const firstResult = Array.isArray(candidate.Results)
-    ? candidate.Results[0]
-    : null;
-
-  if (firstResult && typeof firstResult === 'object') {
-    const nested = Array.isArray((firstResult as { members?: unknown; Members?: unknown }).members)
-      ? (firstResult as { members: unknown[] }).members
-      : Array.isArray((firstResult as { Members?: unknown }).Members)
-        ? (firstResult as { Members: unknown[] }).Members
-        : [];
-
-    return nested.filter((value): value is Record<string, unknown> => !!value && typeof value === 'object');
-  }
-
-  return [];
-}
-
-function normalizeRecord(data: unknown): Record<string, unknown> | null {
-  if (data && typeof data === 'object') {
-    const fromResults = Array.isArray((data as { Results?: unknown[] }).Results)
-      ? (data as { Results: unknown[] }).Results[0]
-      : null;
-
-    if (fromResults && typeof fromResults === 'object') {
-      return fromResults as Record<string, unknown>;
-    }
-
-    return data as Record<string, unknown>;
-  }
-
-  return null;
-}
-
-function pickNumber(source: Record<string, unknown>, keys: string[]): number | null {
-  for (const key of keys) {
-    const value = readValue(source, key);
-    const numeric = typeof value === 'number' ? value : Number(value);
-    if (Number.isFinite(numeric)) {
-      return numeric;
-    }
-  }
-
-  return null;
-}
-
-function pickString(source: Record<string, unknown>, keys: string[]): string | undefined {
-  for (const key of keys) {
-    const value = readValue(source, key);
-    if (typeof value === 'string' && value.trim()) {
-      return value.trim();
-    }
-  }
-
-  return undefined;
-}
-
 function buildMemberName(member: Record<string, unknown>, fallbackId: number) {
   const fullName = pickString(member, ['fullName', 'FullName']);
 
@@ -577,34 +334,15 @@ function buildMemberName(member: Record<string, unknown>, fallbackId: number) {
   return joined || `Constituent ${fallbackId}`;
 }
 
-function normalizeBoolean(value: unknown): boolean | null {
-  if (typeof value === 'boolean') {
-    return value;
-  }
-
-  if (typeof value === 'string') {
-    const normalized = value.trim().toLowerCase();
-
-    if (normalized === 'true') {
-      return true;
-    }
-
-    if (normalized === 'false') {
-      return false;
+function pickString(source: Record<string, unknown>, keys: string[]): string | undefined {
+  for (const key of keys) {
+    const value = readValue(source, key);
+    if (typeof value === 'string' && value.trim()) {
+      return value.trim();
     }
   }
 
-  if (typeof value === 'number') {
-    if (value === 1) {
-      return true;
-    }
-
-    if (value === 0) {
-      return false;
-    }
-  }
-
-  return null;
+  return undefined;
 }
 
 function readValue(source: Record<string, unknown>, path: string): unknown {
