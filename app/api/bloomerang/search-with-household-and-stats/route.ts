@@ -227,7 +227,7 @@ async function getHousehold(householdId: number, apiKey: string) {
 
 async function loadMembersFromHousehold(household: Record<string, unknown>, apiKey: string): Promise<MemberWithStats[]> {
   const memberRecords = getMemberArray(household);
-  const ids = memberRecords
+  const idsFromRecords = memberRecords
     .map((member) => pickNumber(member, [
       'accountId',
       'AccountId',
@@ -238,7 +238,9 @@ async function loadMembersFromHousehold(household: Record<string, unknown>, apiK
     ]))
     .filter((id): id is number => Number.isFinite(id));
 
-  const uniqueIds = Array.from(new Set(ids));
+  const idsFromLists = getMemberIdsFromHousehold(household);
+  const combinedIds = [...idsFromRecords, ...idsFromLists];
+  const uniqueIds = Array.from(new Set(combinedIds));
 
   if (!uniqueIds.length) {
     return [];
@@ -246,6 +248,73 @@ async function loadMembersFromHousehold(household: Record<string, unknown>, apiK
 
   const members = await mapWithConcurrency(uniqueIds, 3, async (id) => buildMemberWithStats(id, apiKey));
   return members;
+}
+
+function getMemberIdsFromHousehold(household: Record<string, unknown>): number[] {
+  const candidate = household ?? {};
+  const idFields = [
+    'MemberIds',
+    'memberIds',
+    'Members',
+    'members',
+    'AccountIds',
+    'accountIds',
+    'ConstituentIds',
+    'constituentIds',
+  ];
+
+  const collected: number[] = [];
+
+  for (const field of idFields) {
+    const rawValue = (candidate as Record<string, unknown>)[field];
+    const ids = extractIds(rawValue);
+
+    if (ids.length) {
+      collected.push(...ids);
+    }
+  }
+
+  return collected.filter((value) => Number.isFinite(value));
+}
+
+function extractIds(value: unknown): number[] {
+  if (!value) {
+    return [];
+  }
+
+  if (Array.isArray(value)) {
+    return value
+      .map((entry) => {
+        if (typeof entry === 'number') {
+          return entry;
+        }
+
+        if (typeof entry === 'string' && entry.trim()) {
+          const parsed = Number(entry);
+          return Number.isFinite(parsed) ? parsed : null;
+        }
+
+        if (entry && typeof entry === 'object') {
+          return pickNumber(entry as Record<string, unknown>, [
+            'accountId',
+            'AccountId',
+            'constituentId',
+            'ConstituentId',
+            'Id',
+            'id',
+          ]);
+        }
+
+        return null;
+      })
+      .filter((id): id is number => Number.isFinite(id));
+  }
+
+  if (value && typeof value === 'object' && Array.isArray((value as Record<string, unknown>).Results)) {
+    return extractIds((value as Record<string, unknown>).Results);
+  }
+
+  return [];
 }
 
 async function buildMemberWithStats(constituentId: number, apiKey: string, existingProfile: Record<string, unknown> | null = null): Promise<MemberWithStats> {
