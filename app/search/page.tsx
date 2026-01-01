@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, useState } from 'react';
+import { FormEvent, useEffect, useState } from 'react';
 
 import styles from './styles.module.css';
 
@@ -23,6 +23,31 @@ type MemberWithStats = {
   profileUrl?: string;
   statsError?: string;
   constituentError?: string;
+};
+
+type ActivitySummary = {
+  ok: boolean;
+  summary?: {
+    keyPoints: string[];
+    recentTimeline: string[];
+    lastMeaningfulInteraction: { date: string | null; channel: string | null; summary: string | null };
+    suggestedNextSteps: string[];
+    recommendedOpeningLine: string;
+  };
+  notesMeta?: {
+    totalFetched: number;
+    usedCount: number;
+    newestCreatedDate: string | null;
+    oldestCreatedDate: string | null;
+  };
+  interactionsMeta?: {
+    totalFetched: number;
+    usedCount: number;
+    newestCreatedDate: string | null;
+    oldestCreatedDate: string | null;
+  };
+  error?: string;
+  status?: number;
 };
 
 type SearchResult = {
@@ -55,11 +80,14 @@ export default function SearchPage() {
   const [result, setResult] = useState<CombinedSearchResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [activitySummary, setActivitySummary] = useState<ActivitySummary | null>(null);
+  const [activityLoading, setActivityLoading] = useState(false);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError(null);
     setResult(null);
+    setActivitySummary(null);
 
     const trimmed = accountNumber.trim();
     if (!trimmed) {
@@ -94,6 +122,51 @@ export default function SearchPage() {
       setLoading(false);
     }
   };
+
+  const memberIds = (result?.members ?? [])
+    .map((member) => member.constituentId)
+    .filter((id) => Number.isFinite(id));
+
+  const loadActivitySummary = async (forceRefresh = false) => {
+    if (!memberIds.length) {
+      setActivitySummary(null);
+      return;
+    }
+
+    if (activityLoading && !forceRefresh) {
+      return;
+    }
+
+    setActivityLoading(true);
+
+    try {
+      const response = await fetch('/api/bloomerang/household-activity-summary', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ memberIds }),
+      });
+
+      const payload = (await response.json()) as ActivitySummary;
+
+      setActivitySummary(payload);
+    } catch (err) {
+      console.error('Activity summary request failed', err);
+      setActivitySummary({ ok: false, error: 'Unable to load activity summary.' });
+    } finally {
+      setActivityLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!memberIds.length || loading) {
+      return;
+    }
+
+    void loadActivitySummary();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [memberIds.join('|'), loading]);
 
   const members = result?.members ?? [];
   const householdTotals = result?.householdTotals ?? null;
@@ -160,6 +233,104 @@ export default function SearchPage() {
                 )
               ) : (
                 <p className={styles.muted}>Search for a constituent to load household info.</p>
+              )}
+            </div>
+
+            <div className={styles.output}>
+              <div className={styles.outputHeadingRow}>
+                <p className={styles.outputLabel}>Household Activity Summary</p>
+                <button
+                  type="button"
+                  className={styles.ghostButton}
+                  onClick={() => loadActivitySummary(true)}
+                  disabled={activityLoading || loading || !memberIds.length}
+                >
+                  {activityLoading ? 'Refreshing…' : 'Refresh Summary'}
+                </button>
+              </div>
+              {loading ? (
+                <p className={styles.muted}>Loading…</p>
+              ) : activityLoading && !activitySummary ? (
+                <p className={styles.muted}>Generating summary…</p>
+              ) : activitySummary?.ok && activitySummary.summary ? (
+                <div className={styles.notesSummary}>
+                  {activitySummary.summary.recommendedOpeningLine && (
+                    <div className={styles.openingLine}>
+                      <p className={styles.notesSummaryLabel}>Recommended Opening Line</p>
+                      <p className={styles.openingLineText}>
+                        {activitySummary.summary.recommendedOpeningLine}
+                      </p>
+                    </div>
+                  )}
+
+                  <div className={styles.notesSummaryGrid}>
+                    <div>
+                      <p className={styles.notesSummaryLabel}>Key Points</p>
+                      {activitySummary.summary.keyPoints.length ? (
+                        <ul className={styles.bulletList}>
+                          {activitySummary.summary.keyPoints.map((point, index) => (
+                            <li key={index}>{point}</li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className={styles.muted}>No key points returned.</p>
+                      )}
+                    </div>
+
+                    <div>
+                      <p className={styles.notesSummaryLabel}>Suggested Next Steps</p>
+                      {activitySummary.summary.suggestedNextSteps.length ? (
+                        <ul className={styles.bulletList}>
+                          {activitySummary.summary.suggestedNextSteps.map((step, index) => (
+                            <li key={index}>{step}</li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className={styles.muted}>No suggestions returned.</p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div>
+                    <p className={styles.notesSummaryLabel}>Recent Timeline</p>
+                    {activitySummary.summary.recentTimeline.length ? (
+                      <ul className={styles.bulletList}>
+                        {activitySummary.summary.recentTimeline.map((item, index) => (
+                          <li key={index}>{item}</li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className={styles.muted}>No recent timeline available.</p>
+                    )}
+                  </div>
+
+                  {activitySummary.summary.lastMeaningfulInteraction && (
+                    <div className={styles.lastInteraction}>
+                      <p className={styles.notesSummaryLabel}>Last Meaningful Interaction</p>
+                      <p className={styles.muted}>
+                        {renderLastInteraction(activitySummary.summary.lastMeaningfulInteraction)}
+                      </p>
+                    </div>
+                  )}
+
+                  {(activitySummary.interactionsMeta || activitySummary.notesMeta) && (
+                    <p className={styles.notesMeta}>
+                      {activitySummary.interactionsMeta
+                        ? `Interactions used: ${activitySummary.interactionsMeta.usedCount} of ${activitySummary.interactionsMeta.totalFetched}${renderDateRange(activitySummary.interactionsMeta)}`
+                        : 'Interactions unavailable.'}
+                      {' '}
+                      {activitySummary.notesMeta
+                        ? `Notes used: ${activitySummary.notesMeta.usedCount} of ${activitySummary.notesMeta.totalFetched}${renderDateRange(activitySummary.notesMeta)}`
+                        : 'Notes unavailable.'}
+                    </p>
+                  )}
+                </div>
+              ) : activitySummary ? (
+                <p className={styles.error}>
+                  {activitySummary.error || 'Unable to generate activity summary.'}
+                </p>
+              ) : (
+                <p className={styles.muted}>Search for a constituent to load activity.</p>
               )}
             </div>
 
@@ -280,6 +451,29 @@ function formatCurrency(amount: number) {
 function formatDate(value: string) {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString();
+}
+
+function renderDateRange(meta: { newestCreatedDate: string | null; oldestCreatedDate: string | null }) {
+  if (!meta.newestCreatedDate || !meta.oldestCreatedDate) {
+    return '';
+  }
+
+  const newest = formatDate(meta.newestCreatedDate);
+  const oldest = formatDate(meta.oldestCreatedDate);
+
+  return ` (date range ${oldest} – ${newest})`;
+}
+
+function renderLastInteraction(lastMeaningful: { date: string | null; channel: string | null; summary: string | null }) {
+  if (!lastMeaningful.date && !lastMeaningful.channel && !lastMeaningful.summary) {
+    return 'No meaningful interactions found.';
+  }
+
+  const date = lastMeaningful.date ? formatDate(lastMeaningful.date) : 'Date unknown';
+  const channel = lastMeaningful.channel ?? 'Channel unknown';
+  const summary = lastMeaningful.summary ?? '';
+
+  return `${date} • ${channel}${summary ? ` — ${summary}` : ''}`;
 }
 
 function extractHouseholdName(data: unknown): string | null {
