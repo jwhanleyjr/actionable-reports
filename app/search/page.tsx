@@ -25,14 +25,21 @@ type MemberWithStats = {
   constituentError?: string;
 };
 
-type NotesSummary = {
+type ActivitySummary = {
   ok: boolean;
   summary?: {
     keyPoints: string[];
     recentTimeline: string[];
+    lastMeaningfulInteraction: { date: string | null; channel: string | null; summary: string | null };
     suggestedNextSteps: string[];
   };
   notesMeta?: {
+    totalFetched: number;
+    usedCount: number;
+    newestCreatedDate: string | null;
+    oldestCreatedDate: string | null;
+  };
+  interactionsMeta?: {
     totalFetched: number;
     usedCount: number;
     newestCreatedDate: string | null;
@@ -72,14 +79,14 @@ export default function SearchPage() {
   const [result, setResult] = useState<CombinedSearchResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [notesSummary, setNotesSummary] = useState<NotesSummary | null>(null);
-  const [notesLoading, setNotesLoading] = useState(false);
+  const [activitySummary, setActivitySummary] = useState<ActivitySummary | null>(null);
+  const [activityLoading, setActivityLoading] = useState(false);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError(null);
     setResult(null);
-    setNotesSummary(null);
+    setActivitySummary(null);
 
     const trimmed = accountNumber.trim();
     if (!trimmed) {
@@ -119,20 +126,20 @@ export default function SearchPage() {
     .map((member) => member.constituentId)
     .filter((id) => Number.isFinite(id));
 
-  const loadNotesSummary = async (forceRefresh = false) => {
+  const loadActivitySummary = async (forceRefresh = false) => {
     if (!memberIds.length) {
-      setNotesSummary(null);
+      setActivitySummary(null);
       return;
     }
 
-    if (notesLoading && !forceRefresh) {
+    if (activityLoading && !forceRefresh) {
       return;
     }
 
-    setNotesLoading(true);
+    setActivityLoading(true);
 
     try {
-      const response = await fetch('/api/bloomerang/household-notes-summary', {
+      const response = await fetch('/api/bloomerang/household-activity-summary', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -140,14 +147,14 @@ export default function SearchPage() {
         body: JSON.stringify({ memberIds }),
       });
 
-      const payload = (await response.json()) as NotesSummary;
+      const payload = (await response.json()) as ActivitySummary;
 
-      setNotesSummary(payload);
+      setActivitySummary(payload);
     } catch (err) {
-      console.error('Notes summary request failed', err);
-      setNotesSummary({ ok: false, error: 'Unable to load notes summary.' });
+      console.error('Activity summary request failed', err);
+      setActivitySummary({ ok: false, error: 'Unable to load activity summary.' });
     } finally {
-      setNotesLoading(false);
+      setActivityLoading(false);
     }
   };
 
@@ -156,7 +163,7 @@ export default function SearchPage() {
       return;
     }
 
-    void loadNotesSummary();
+    void loadActivitySummary();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [memberIds.join('|'), loading]);
 
@@ -230,28 +237,28 @@ export default function SearchPage() {
 
             <div className={styles.output}>
               <div className={styles.outputHeadingRow}>
-                <p className={styles.outputLabel}>Household Notes Summary</p>
+                <p className={styles.outputLabel}>Household Activity Summary</p>
                 <button
                   type="button"
                   className={styles.ghostButton}
-                  onClick={() => loadNotesSummary(true)}
-                  disabled={notesLoading || loading || !memberIds.length}
+                  onClick={() => loadActivitySummary(true)}
+                  disabled={activityLoading || loading || !memberIds.length}
                 >
-                  {notesLoading ? 'Refreshing…' : 'Refresh Summary'}
+                  {activityLoading ? 'Refreshing…' : 'Refresh Summary'}
                 </button>
               </div>
               {loading ? (
                 <p className={styles.muted}>Loading…</p>
-              ) : notesLoading && !notesSummary ? (
+              ) : activityLoading && !activitySummary ? (
                 <p className={styles.muted}>Generating summary…</p>
-              ) : notesSummary?.ok && notesSummary.summary ? (
+              ) : activitySummary?.ok && activitySummary.summary ? (
                 <div className={styles.notesSummary}>
                   <div className={styles.notesSummaryGrid}>
                     <div>
                       <p className={styles.notesSummaryLabel}>Key Points</p>
-                      {notesSummary.summary.keyPoints.length ? (
+                      {activitySummary.summary.keyPoints.length ? (
                         <ul className={styles.bulletList}>
-                          {notesSummary.summary.keyPoints.map((point, index) => (
+                          {activitySummary.summary.keyPoints.map((point, index) => (
                             <li key={index}>{point}</li>
                           ))}
                         </ul>
@@ -262,9 +269,9 @@ export default function SearchPage() {
 
                     <div>
                       <p className={styles.notesSummaryLabel}>Suggested Next Steps</p>
-                      {notesSummary.summary.suggestedNextSteps.length ? (
+                      {activitySummary.summary.suggestedNextSteps.length ? (
                         <ul className={styles.bulletList}>
-                          {notesSummary.summary.suggestedNextSteps.map((step, index) => (
+                          {activitySummary.summary.suggestedNextSteps.map((step, index) => (
                             <li key={index}>{step}</li>
                           ))}
                         </ul>
@@ -276,9 +283,9 @@ export default function SearchPage() {
 
                   <div>
                     <p className={styles.notesSummaryLabel}>Recent Timeline</p>
-                    {notesSummary.summary.recentTimeline.length ? (
+                    {activitySummary.summary.recentTimeline.length ? (
                       <ul className={styles.bulletList}>
-                        {notesSummary.summary.recentTimeline.map((item, index) => (
+                        {activitySummary.summary.recentTimeline.map((item, index) => (
                           <li key={index}>{item}</li>
                         ))}
                       </ul>
@@ -287,19 +294,33 @@ export default function SearchPage() {
                     )}
                   </div>
 
-                  {notesSummary.notesMeta && (
+                  {activitySummary.summary.lastMeaningfulInteraction && (
+                    <div className={styles.lastInteraction}>
+                      <p className={styles.notesSummaryLabel}>Last Meaningful Interaction</p>
+                      <p className={styles.muted}>
+                        {renderLastInteraction(activitySummary.summary.lastMeaningfulInteraction)}
+                      </p>
+                    </div>
+                  )}
+
+                  {(activitySummary.interactionsMeta || activitySummary.notesMeta) && (
                     <p className={styles.notesMeta}>
-                      Notes included: {notesSummary.notesMeta.usedCount} of {notesSummary.notesMeta.totalFetched}
-                      {renderDateRange(notesSummary.notesMeta)}
+                      {activitySummary.interactionsMeta
+                        ? `Interactions used: ${activitySummary.interactionsMeta.usedCount} of ${activitySummary.interactionsMeta.totalFetched}${renderDateRange(activitySummary.interactionsMeta)}`
+                        : 'Interactions unavailable.'}
+                      {' '}
+                      {activitySummary.notesMeta
+                        ? `Notes used: ${activitySummary.notesMeta.usedCount} of ${activitySummary.notesMeta.totalFetched}${renderDateRange(activitySummary.notesMeta)}`
+                        : 'Notes unavailable.'}
                     </p>
                   )}
                 </div>
-              ) : notesSummary ? (
+              ) : activitySummary ? (
                 <p className={styles.error}>
-                  {notesSummary.error || 'Unable to generate notes summary.'}
+                  {activitySummary.error || 'Unable to generate activity summary.'}
                 </p>
               ) : (
-                <p className={styles.muted}>Search for a constituent to load notes.</p>
+                <p className={styles.muted}>Search for a constituent to load activity.</p>
               )}
             </div>
 
@@ -431,6 +452,18 @@ function renderDateRange(meta: { newestCreatedDate: string | null; oldestCreated
   const oldest = formatDate(meta.oldestCreatedDate);
 
   return ` (date range ${oldest} – ${newest})`;
+}
+
+function renderLastInteraction(lastMeaningful: { date: string | null; channel: string | null; summary: string | null }) {
+  if (!lastMeaningful.date && !lastMeaningful.channel && !lastMeaningful.summary) {
+    return 'No meaningful interactions found.';
+  }
+
+  const date = lastMeaningful.date ? formatDate(lastMeaningful.date) : 'Date unknown';
+  const channel = lastMeaningful.channel ?? 'Channel unknown';
+  const summary = lastMeaningful.summary ?? '';
+
+  return `${date} • ${channel}${summary ? ` — ${summary}` : ''}`;
 }
 
 function extractHouseholdName(data: unknown): string | null {

@@ -320,6 +320,13 @@
   margin-bottom: 6px;
 }
 
+.lastInteraction {
+  background: #f5fbff;
+  border: 1px solid #cbe7fb;
+  border-radius: 10px;
+  padding: 12px;
+}
+
 .bulletList {
   margin: 0;
   padding-left: 18px;

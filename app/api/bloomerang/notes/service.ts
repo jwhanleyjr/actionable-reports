@@ -112,14 +112,11 @@ export function selectNotesForSummary(notes: HouseholdNote[]): { selected: House
   const twelveMonthsAgo = new Date(now);
   twelveMonthsAgo.setMonth(twelveMonthsAgo.getMonth() - 12);
 
-  const recentNotes = notes.filter((note) => {
+  const sorted = sortByDate(notes);
+  const recentNotes = sorted.filter((note) => {
     const date = new Date(note.createdDate);
     return !Number.isNaN(date.getTime()) && date >= twelveMonthsAgo;
   });
-
-  if (notes.length < 20) {
-    return { selected: sortByDate(notes), usedCount: notes.length };
-  }
 
   const selectedSet = new Set<number>();
   const selectedNotes: HouseholdNote[] = [];
@@ -131,14 +128,23 @@ export function selectNotesForSummary(notes: HouseholdNote[]): { selected: House
     }
   }
 
-  const highSignalKeywords = ['call', 'email', 'met', 'prefers', 'interested', 'update', 'prayer', 'concern', 'follow-up'];
+  const highSignalKeywords = ['interested', 'prefers', 'asked', 'building', 'tile', 'follow up', 'follow-up', 'call', 'pledge', 'increase', 'concern'];
   const keywordRegex = new RegExp(highSignalKeywords.join('|'), 'i');
 
-  for (const note of notes) {
-    if (selectedNotes.length >= recentNotes.length + 10) {
+  for (const note of sorted) {
+    if (selectedNotes.length >= 30) {
       break;
     }
 
+    if (selectedSet.has(note.id)) {
+      continue;
+    }
+
+    selectedSet.add(note.id);
+    selectedNotes.push(note);
+  }
+
+  for (const note of sorted) {
     if (selectedSet.has(note.id)) {
       continue;
     }
