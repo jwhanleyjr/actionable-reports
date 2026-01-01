@@ -174,6 +174,36 @@
   color: #556987;
 }
 
+.outputHeadingRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.ghostButton {
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  color: #1e83b5;
+  border-radius: 10px;
+  padding: 8px 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.2s ease, box-shadow 0.2s ease;
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.04);
+}
+
+.ghostButton:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.ghostButton:not(:disabled):hover {
+  background: #f1f5f9;
+}
+
 .muted {
   color: #718096;
 }
@@ -265,4 +295,40 @@
 .statValue {
   font-weight: 800;
   color: #1f2937;
+}
+
+.notesSummary {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: 0 10px 18px rgba(0, 0, 0, 0.04);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.notesSummaryGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px;
+}
+
+.notesSummaryLabel {
+  font-weight: 800;
+  color: #1f2937;
+  margin-bottom: 6px;
+}
+
+.bulletList {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 6px;
+  color: #1f2937;
+}
+
+.notesMeta {
+  color: #556987;
+  font-size: 13px;
 }

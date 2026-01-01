@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, useState } from 'react';
+import { FormEvent, useEffect, useState } from 'react';
 
 import styles from './styles.module.css';
 
@@ -23,6 +23,23 @@ type MemberWithStats = {
   profileUrl?: string;
   statsError?: string;
   constituentError?: string;
+};
+
+type NotesSummary = {
+  ok: boolean;
+  summary?: {
+    keyPoints: string[];
+    recentTimeline: string[];
+    suggestedNextSteps: string[];
+  };
+  notesMeta?: {
+    totalFetched: number;
+    usedCount: number;
+    newestCreatedDate: string | null;
+    oldestCreatedDate: string | null;
+  };
+  error?: string;
+  status?: number;
 };
 
 type SearchResult = {
@@ -55,11 +72,14 @@ export default function SearchPage() {
   const [result, setResult] = useState<CombinedSearchResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [notesSummary, setNotesSummary] = useState<NotesSummary | null>(null);
+  const [notesLoading, setNotesLoading] = useState(false);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError(null);
     setResult(null);
+    setNotesSummary(null);
 
     const trimmed = accountNumber.trim();
     if (!trimmed) {
@@ -94,6 +114,51 @@ export default function SearchPage() {
       setLoading(false);
     }
   };
+
+  const memberIds = (result?.members ?? [])
+    .map((member) => member.constituentId)
+    .filter((id) => Number.isFinite(id));
+
+  const loadNotesSummary = async (forceRefresh = false) => {
+    if (!memberIds.length) {
+      setNotesSummary(null);
+      return;
+    }
+
+    if (notesLoading && !forceRefresh) {
+      return;
+    }
+
+    setNotesLoading(true);
+
+    try {
+      const response = await fetch('/api/bloomerang/household-notes-summary', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ memberIds }),
+      });
+
+      const payload = (await response.json()) as NotesSummary;
+
+      setNotesSummary(payload);
+    } catch (err) {
+      console.error('Notes summary request failed', err);
+      setNotesSummary({ ok: false, error: 'Unable to load notes summary.' });
+    } finally {
+      setNotesLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!memberIds.length || loading) {
+      return;
+    }
+
+    void loadNotesSummary();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [memberIds.join('|'), loading]);
 
   const members = result?.members ?? [];
   const householdTotals = result?.householdTotals ?? null;
@@ -160,6 +225,81 @@ export default function SearchPage() {
                 )
               ) : (
                 <p className={styles.muted}>Search for a constituent to load household info.</p>
+              )}
+            </div>
+
+            <div className={styles.output}>
+              <div className={styles.outputHeadingRow}>
+                <p className={styles.outputLabel}>Household Notes Summary</p>
+                <button
+                  type="button"
+                  className={styles.ghostButton}
+                  onClick={() => loadNotesSummary(true)}
+                  disabled={notesLoading || loading || !memberIds.length}
+                >
+                  {notesLoading ? 'Refreshing…' : 'Refresh Summary'}
+                </button>
+              </div>
+              {loading ? (
+                <p className={styles.muted}>Loading…</p>
+              ) : notesLoading && !notesSummary ? (
+                <p className={styles.muted}>Generating summary…</p>
+              ) : notesSummary?.ok && notesSummary.summary ? (
+                <div className={styles.notesSummary}>
+                  <div className={styles.notesSummaryGrid}>
+                    <div>
+                      <p className={styles.notesSummaryLabel}>Key Points</p>
+                      {notesSummary.summary.keyPoints.length ? (
+                        <ul className={styles.bulletList}>
+                          {notesSummary.summary.keyPoints.map((point, index) => (
+                            <li key={index}>{point}</li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className={styles.muted}>No key points returned.</p>
+                      )}
+                    </div>
+
+                    <div>
+                      <p className={styles.notesSummaryLabel}>Suggested Next Steps</p>
+                      {notesSummary.summary.suggestedNextSteps.length ? (
+                        <ul className={styles.bulletList}>
+                          {notesSummary.summary.suggestedNextSteps.map((step, index) => (
+                            <li key={index}>{step}</li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className={styles.muted}>No suggestions returned.</p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div>
+                    <p className={styles.notesSummaryLabel}>Recent Timeline</p>
+                    {notesSummary.summary.recentTimeline.length ? (
+                      <ul className={styles.bulletList}>
+                        {notesSummary.summary.recentTimeline.map((item, index) => (
+                          <li key={index}>{item}</li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className={styles.muted}>No recent timeline available.</p>
+                    )}
+                  </div>
+
+                  {notesSummary.notesMeta && (
+                    <p className={styles.notesMeta}>
+                      Notes included: {notesSummary.notesMeta.usedCount} of {notesSummary.notesMeta.totalFetched}
+                      {renderDateRange(notesSummary.notesMeta)}
+                    </p>
+                  )}
+                </div>
+              ) : notesSummary ? (
+                <p className={styles.error}>
+                  {notesSummary.error || 'Unable to generate notes summary.'}
+                </p>
+              ) : (
+                <p className={styles.muted}>Search for a constituent to load notes.</p>
               )}
             </div>
 
@@ -280,6 +420,17 @@ function formatCurrency(amount: number) {
 function formatDate(value: string) {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString();
+}
+
+function renderDateRange(meta: { newestCreatedDate: string | null; oldestCreatedDate: string | null }) {
+  if (!meta.newestCreatedDate || !meta.oldestCreatedDate) {
+    return '';
+  }
+
+  const newest = formatDate(meta.newestCreatedDate);
+  const oldest = formatDate(meta.oldestCreatedDate);
+
+  return ` (date range ${oldest} – ${newest})`;
 }
 
 function extractHouseholdName(data: unknown): string | null {
