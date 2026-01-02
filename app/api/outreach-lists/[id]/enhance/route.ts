@@ -1,3 +1,4 @@
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
 
 import { fetchJsonWithModes, getApiKey, normalizeBoolean, pickNumber, pickString } from '../../../bloomerang/utils';
@@ -14,7 +15,16 @@ type EnhanceResult = {
 
 export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
   const { id } = params;
-  const supabase = getSupabaseAdmin();
+
+  let supabase: SupabaseClient;
+  try {
+    supabase = getSupabaseAdmin();
+  } catch (error) {
+    return NextResponse.json(
+      { ok: false, error: error instanceof Error ? error.message : 'Supabase configuration is missing.' },
+      { status: 500 }
+    );
+  }
 
   const body = await request.json().catch(() => ({} as { concurrency?: number }));
   const concurrency = Math.max(1, Math.min(10, Number(body?.concurrency) || 4));
@@ -58,20 +68,42 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       const householdSnapshot = buildHouseholdSnapshot(search.constituent, search.householdId);
       const memberSnapshot = buildMemberSnapshot(search.constituent);
 
-      await supabase.from('outreach_list_households').upsert({
+      const { error: mapError } = await supabase.from('account_number_map').upsert({
+        account_number: next.account_number,
+        constituent_id: search.constituentId,
+        raw: search.constituent,
+        match_confidence: 'exact',
+      });
+
+      if (mapError) {
+        result.errors.push(mapError.message);
+        return;
+      }
+
+      const { error: householdError } = await supabase.from('outreach_list_households').upsert({
         outreach_list_id: id,
         household_id: householdId,
         origin: 'import',
         household_snapshot: householdSnapshot,
       });
 
-      await supabase.from('outreach_list_members').upsert({
+      if (householdError) {
+        result.errors.push(householdError.message);
+        return;
+      }
+
+      const { error: memberError } = await supabase.from('outreach_list_members').upsert({
         outreach_list_id: id,
         household_id: householdId,
         constituent_id: search.constituentId,
         origin: 'import',
         member_snapshot: memberSnapshot,
       });
+
+      if (memberError) {
+        result.errors.push(memberError.message);
+        return;
+      }
 
       result.enhancedHouseholds += 1;
       result.enhancedMembers += 1;

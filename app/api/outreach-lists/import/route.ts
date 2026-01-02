@@ -1,3 +1,4 @@
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
 
 import { getSupabaseAdmin } from '../../../../lib/supabaseAdmin';
@@ -34,7 +35,15 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: false, error: 'No account numbers were found in the uploaded file.' }, { status: 400 });
   }
 
-  const supabase = getSupabaseAdmin();
+  let supabase: SupabaseClient;
+  try {
+    supabase = getSupabaseAdmin();
+  } catch (error) {
+    return NextResponse.json(
+      { ok: false, error: error instanceof Error ? error.message : 'Supabase configuration is missing.' },
+      { status: 500 }
+    );
+  }
 
   const { data: listData, error: listError } = await supabase
     .from('outreach_lists')
