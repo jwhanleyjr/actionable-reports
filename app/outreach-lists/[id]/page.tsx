@@ -15,7 +15,9 @@ type OutreachListRecord = {
 
 type OutreachListHousehold = {
   id: string;
-  household_id: number;
+  household_key?: string;
+  household_id: number | null;
+  solo_constituent_id?: number | null;
   household_snapshot: { displayName?: string };
 };
 
@@ -59,11 +61,13 @@ export default async function OutreachListDetailPage({ params }: { params: { id:
     notFound();
   }
 
-  const groupedMembers = new Map<number, OutreachListMember[]>();
+  const groupedMembers = new Map<string, OutreachListMember[]>();
   (members ?? []).forEach((member) => {
-    const existing = groupedMembers.get(member.household_id) ?? [];
+    const derivedKey =
+      member.member_snapshot?.householdKey || (member.household_id ? `h:${member.household_id}` : `c:${member.constituent_id}`);
+    const existing = groupedMembers.get(derivedKey) ?? [];
     existing.push(member);
-    groupedMembers.set(member.household_id, existing);
+    groupedMembers.set(derivedKey, existing);
   });
 
   return (
@@ -92,13 +96,18 @@ export default async function OutreachListDetailPage({ params }: { params: { id:
           </div>
 
           <div className={styles.list}>
-            {(households ?? []).map((household) => (
-              <OutreachListHouseholdRow
-                key={household.id}
-                household={household}
-                members={groupedMembers.get(household.household_id) ?? []}
-              />
-            ))}
+            {(households ?? []).map((household) => {
+              const householdKey =
+                household.household_key ||
+                (household.household_id ? `h:${household.household_id}` : `c:${household.solo_constituent_id || ''}`);
+              return (
+                <OutreachListHouseholdRow
+                  key={household.id}
+                  household={household}
+                  members={groupedMembers.get(householdKey) ?? []}
+                />
+              );
+            })}
           </div>
         </section>
       </div>

@@ -71,8 +71,10 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
   const queue = [...(importRows ?? [])];
   const executing: Promise<void>[] = [];
   const households = new Map<
-    number,
+    string,
     {
+      householdId: number | null;
+      soloConstituentId: number | null;
       snapshot: Record<string, unknown>;
       members: Map<number, Record<string, unknown>>;
     }
@@ -93,9 +95,10 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       const rawHouseholdId = search.householdId;
       const householdId = Number.isFinite(rawHouseholdId) && (rawHouseholdId as number) > 0
         ? (rawHouseholdId as number)
-        : -search.constituentId;
+        : null;
+      const householdKey = householdId ? `h:${householdId}` : `c:${search.constituentId}`;
       const householdSnapshot = buildHouseholdSnapshot(search.constituent, householdId);
-      const memberSnapshot = buildMemberSnapshot(search.constituent);
+      const memberSnapshot = buildMemberSnapshot(search.constituent, householdKey);
 
       const { error: mapError } = await supabase.from('account_number_map').upsert({
         account_number: next.account_number,
@@ -109,11 +112,13 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         return;
       }
 
-      const existing = households.get(householdId);
+      const existing = households.get(householdKey);
       if (existing) {
         existing.members.set(search.constituentId, memberSnapshot);
       } else {
-        households.set(householdId, {
+        households.set(householdKey, {
+          householdId,
+          soloConstituentId: householdId ? null : search.constituentId,
           snapshot: householdSnapshot,
           members: new Map([[search.constituentId, memberSnapshot]]),
         });
@@ -138,17 +143,19 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     return NextResponse.json({ ok: true, ...result });
   }
 
-  const householdRows = Array.from(households.entries()).map(([householdId, data]) => ({
+  const householdRows = Array.from(households.entries()).map(([householdKey, data]) => ({
     outreach_list_id: id,
-    household_id: householdId,
+    household_key: householdKey,
+    household_id: data.householdId,
+    solo_constituent_id: data.soloConstituentId,
     origin: 'import',
     household_snapshot: data.snapshot,
   }));
 
-  const memberRows = Array.from(households.entries()).flatMap(([householdId, data]) =>
+  const memberRows = Array.from(households.entries()).flatMap(([_householdKey, data]) =>
     Array.from(data.members.entries()).map(([constituentId, memberSnapshot]) => ({
       outreach_list_id: id,
-      household_id: householdId,
+      household_id: data.householdId ?? constituentId,
       constituent_id: constituentId,
       origin: 'import',
       member_snapshot: memberSnapshot,
@@ -157,7 +164,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
 
   const { error: householdUpsertError } = await supabase
     .from('outreach_list_households')
-    .upsert(householdRows, { onConflict: 'outreach_list_id,household_id' });
+    .upsert(householdRows, { onConflict: 'outreach_list_id,household_key' });
 
   if (householdUpsertError) {
     result.errors.push(householdUpsertError.message);
@@ -165,7 +172,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
 
   const { error: memberUpsertError } = await supabase
     .from('outreach_list_members')
-    .upsert(memberRows, { onConflict: 'outreach_list_id,household_id,constituent_id' });
+    .upsert(memberRows, { onConflict: 'outreach_list_id,constituent_id' });
 
   if (memberUpsertError) {
     result.errors.push(memberUpsertError.message);
@@ -225,7 +232,7 @@ function buildHouseholdSnapshot(constituent: Record<string, unknown>, householdI
   };
 }
 
-function buildMemberSnapshot(constituent: Record<string, unknown>) {
+function buildMemberSnapshot(constituent: Record<string, unknown>, householdKey: string) {
   const displayName = pickString(constituent, ['FullName', 'Name', 'name']) || 'Constituent';
   const email = pickString(constituent, ['Email', 'PrimaryEmail', 'email']);
   const phone = pickString(constituent, ['Phone', 'PrimaryPhone', 'phone']);
@@ -234,6 +241,7 @@ function buildMemberSnapshot(constituent: Record<string, unknown>) {
     displayName,
     email,
     phone,
+    householdKey,
     source: 'bloomerang-search',
   };
 }

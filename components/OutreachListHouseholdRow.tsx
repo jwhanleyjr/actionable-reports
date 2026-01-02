@@ -13,6 +13,7 @@ type MemberSnapshot = {
   displayName?: string;
   email?: string;
   phone?: string;
+  householdKey?: string;
 };
 
 export type OutreachListMember = {
@@ -24,7 +25,9 @@ export type OutreachListMember = {
 
 export type OutreachListHousehold = {
   id: string;
-  household_id: number;
+  household_key?: string;
+  household_id: number | null;
+  solo_constituent_id?: number | null;
   household_snapshot: HouseholdSnapshot;
 };
 
@@ -36,7 +39,10 @@ type Props = {
 export function OutreachListHouseholdRow({ household, members }: Props) {
   const [expanded, setExpanded] = useState(false);
 
-  const title = household.household_snapshot?.displayName || `Household ${household.household_id}`;
+  const title =
+    household.household_snapshot?.displayName ||
+    members[0]?.member_snapshot?.displayName ||
+    (household.household_id ? `Household ${household.household_id}` : 'Household');
 
   return (
     <div className={styles.card}>
