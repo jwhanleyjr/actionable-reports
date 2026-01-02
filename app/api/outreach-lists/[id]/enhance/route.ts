@@ -79,6 +79,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       members: Map<number, Record<string, unknown>>;
     }
   >();
+  const memberAccountNumbers = new Map<number, string>();
 
   const processNext = async () => {
     const next = queue.shift();
@@ -88,6 +89,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       const search = await searchConstituent(next.account_number, apiKey);
 
       if (!search.ok || !search.constituentId) {
+        console.log('enhance:search-miss', { outreach_list_id: id, account_number: next.account_number });
         result.notFound.push(next.account_number);
         return;
       }
@@ -99,6 +101,15 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       const householdKey = householdId ? `h:${householdId}` : `c:${search.constituentId}`;
       const householdSnapshot = buildHouseholdSnapshot(search.constituent, householdId);
       const memberSnapshot = buildMemberSnapshot(search.constituent, householdKey);
+      memberAccountNumbers.set(search.constituentId, next.account_number);
+
+      console.log('enhance:search-success', {
+        outreach_list_id: id,
+        account_number: next.account_number,
+        constituent_id: search.constituentId,
+        household_id: householdId,
+        household_key: householdKey,
+      });
 
       const { error: mapError } = await supabase.from('account_number_map').upsert({
         account_number: next.account_number,
@@ -152,23 +163,58 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     household_snapshot: data.snapshot,
   }));
 
-  const memberRows = Array.from(households.entries()).flatMap(([_householdKey, data]) =>
-    Array.from(data.members.entries()).map(([constituentId, memberSnapshot]) => ({
-      outreach_list_id: id,
-      household_id: data.householdId ?? constituentId,
-      constituent_id: constituentId,
-      origin: 'import',
-      member_snapshot: memberSnapshot,
-    }))
-  );
-
-  const { error: householdUpsertError } = await supabase
+  const householdIdMap = new Map<string, string>();
+  const { data: upsertedHouseholds, error: householdUpsertError } = await supabase
     .from('outreach_list_households')
-    .upsert(householdRows, { onConflict: 'outreach_list_id,household_key' });
+    .upsert(householdRows, { onConflict: 'outreach_list_id,household_key' })
+    .select('id, household_key, household_id, solo_constituent_id');
 
   if (householdUpsertError) {
     result.errors.push(householdUpsertError.message);
+    return NextResponse.json({ ok: false, ...result }, { status: 500 });
   }
+
+  (upsertedHouseholds ?? []).forEach((row) => {
+    householdIdMap.set(row.household_key, row.id);
+    console.log('enhance:household-upsert', {
+      outreach_list_id: id,
+      household_key: row.household_key,
+      household_id: row.household_id,
+      solo_constituent_id: row.solo_constituent_id,
+      list_household_id: row.id,
+      upsert_path: 'households',
+    });
+  });
+
+  const memberRows = Array.from(households.entries()).flatMap(([householdKey, data]) => {
+    const outreachListHouseholdId = householdIdMap.get(householdKey);
+
+    if (!outreachListHouseholdId) {
+      result.errors.push(`Missing household mapping for key ${householdKey}`);
+      return [] as { outreach_list_household_id: string; outreach_list_id: string; household_id: number | null; constituent_id: number; origin: string; member_snapshot: Record<string, unknown> }[];
+    }
+
+    return Array.from(data.members.entries()).map(([constituentId, memberSnapshot]) => {
+      const accountNumber = memberAccountNumbers.get(constituentId) ?? null;
+      console.log('enhance:member-upsert', {
+        outreach_list_id: id,
+        outreach_list_household_id: outreachListHouseholdId,
+        constituent_id: constituentId,
+        household_id: data.householdId,
+        account_number: accountNumber,
+        upsert_path: 'members',
+      });
+
+      return {
+        outreach_list_household_id: outreachListHouseholdId,
+        outreach_list_id: id,
+        household_id: data.householdId,
+        constituent_id: constituentId,
+        origin: 'import',
+        member_snapshot: memberSnapshot,
+      };
+    });
+  });
 
   const { error: memberUpsertError } = await supabase
     .from('outreach_list_members')

@@ -63,11 +63,10 @@ export default async function OutreachListDetailPage({ params }: { params: { id:
 
   const groupedMembers = new Map<string, OutreachListMember[]>();
   (members ?? []).forEach((member) => {
-    const derivedKey =
-      member.member_snapshot?.householdKey || (member.household_id ? `h:${member.household_id}` : `c:${member.constituent_id}`);
-    const existing = groupedMembers.get(derivedKey) ?? [];
+    const key = member.outreach_list_household_id || member.member_snapshot?.householdKey || member.id;
+    const existing = groupedMembers.get(key) ?? [];
     existing.push(member);
-    groupedMembers.set(derivedKey, existing);
+    groupedMembers.set(key, existing);
   });
 
   return (
@@ -96,18 +95,13 @@ export default async function OutreachListDetailPage({ params }: { params: { id:
           </div>
 
           <div className={styles.list}>
-            {(households ?? []).map((household) => {
-              const householdKey =
-                household.household_key ||
-                (household.household_id ? `h:${household.household_id}` : `c:${household.solo_constituent_id || ''}`);
-              return (
-                <OutreachListHouseholdRow
-                  key={household.id}
-                  household={household}
-                  members={groupedMembers.get(householdKey) ?? []}
-                />
-              );
-            })}
+            {(households ?? []).map((household) => (
+              <OutreachListHouseholdRow
+                key={household.id}
+                household={household}
+                members={groupedMembers.get(household.id) ?? []}
+              />
+            ))}
           </div>
         </section>
       </div>

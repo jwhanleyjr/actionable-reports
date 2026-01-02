@@ -18,7 +18,8 @@ type MemberSnapshot = {
 
 export type OutreachListMember = {
   id: string;
-  household_id: number;
+  outreach_list_household_id: string;
+  household_id: number | null;
   constituent_id: number;
   member_snapshot: MemberSnapshot;
 };
