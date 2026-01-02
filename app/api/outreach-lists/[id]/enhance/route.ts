@@ -64,8 +64,11 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         return;
       }
 
-      const householdId = search.householdId ?? -search.constituentId;
-      const householdSnapshot = buildHouseholdSnapshot(search.constituent, search.householdId);
+      const rawHouseholdId = search.householdId;
+      const householdId = Number.isFinite(rawHouseholdId) && (rawHouseholdId as number) > 0
+        ? (rawHouseholdId as number)
+        : -search.constituentId;
+      const householdSnapshot = buildHouseholdSnapshot(search.constituent, householdId);
       const memberSnapshot = buildMemberSnapshot(search.constituent);
 
       const { error: mapError } = await supabase.from('account_number_map').upsert({
