@@ -204,72 +204,49 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       return NextResponse.json({ ok: true, ...result, debug });
     }
 
-    const householdRows = Array.from(households.entries()).map(([householdKey, data]) => ({
-      outreach_list_id: id,
-      household_key: householdKey,
-      household_id: data.householdId,
-      solo_constituent_id: data.soloConstituentId,
-      origin: 'import',
-      household_snapshot: data.snapshot,
-    }));
+    const householdRows = Array.from(households.entries()).map(([_, data]) => {
+      const household_key = data.householdId != null ? `h:${data.householdId}` : `c:${data.soloConstituentId}`;
+
+      return {
+        outreach_list_id: id,
+        household_key,
+        household_id: data.householdId ?? null,
+        solo_constituent_id: data.soloConstituentId ?? null,
+        origin: 'import',
+        household_snapshot: data.snapshot,
+      };
+    });
 
     debug.steps.push('upsert-households');
 
     const householdIdMap = new Map<string, string>();
 
-    const realHouseholdRows = householdRows.filter((row) => row.household_id !== null);
-    if (realHouseholdRows.length) {
-      const { data: realUpserts, error: realError } = await supabase
-        .from('outreach_list_households')
-        .upsert(realHouseholdRows, { onConflict: 'outreach_list_id,household_id' })
-        .select('id, household_key, household_id, solo_constituent_id');
+    const { data: upserts, error } = await supabase
+      .from('outreach_list_households')
+      .upsert(householdRows, { onConflict: 'outreach_list_id,household_key' })
+      .select('id, household_key, household_id, solo_constituent_id');
 
-      if (realError) {
-        result.errors.push(realError.message);
-        return NextResponse.json({ ok: false, ...result, debug }, { status: 500 });
-      }
-
-      (realUpserts ?? []).forEach((row) => {
-        householdIdMap.set(row.household_key, row.id);
-        console.log('enhance:household-upsert', {
-          outreach_list_id: id,
-          household_key: row.household_key,
-          household_id: row.household_id,
-          solo_constituent_id: row.solo_constituent_id,
-          list_household_id: row.id,
-          upsert_path: 'households-real',
-        });
-      });
+    if (error) {
+      result.errors.push(error.message);
+      return NextResponse.json({ ok: false, ...result, debug }, { status: 500 });
     }
 
-    const soloHouseholdRows = householdRows.filter((row) => row.household_id === null);
-    if (soloHouseholdRows.length) {
-      const { data: soloUpserts, error: soloError } = await supabase
-        .from('outreach_list_households')
-        .upsert(soloHouseholdRows, { onConflict: 'outreach_list_id,household_key' })
-        .select('id, household_key, household_id, solo_constituent_id');
-
-      if (soloError) {
-        result.errors.push(soloError.message);
-        return NextResponse.json({ ok: false, ...result, debug }, { status: 500 });
-      }
-
-      (soloUpserts ?? []).forEach((row) => {
-        householdIdMap.set(row.household_key, row.id);
-        console.log('enhance:household-upsert', {
-          outreach_list_id: id,
-          household_key: row.household_key,
-          household_id: row.household_id,
-          solo_constituent_id: row.solo_constituent_id,
-          list_household_id: row.id,
-          upsert_path: 'households-solo',
-        });
+    (upserts ?? []).forEach((row) => {
+      householdIdMap.set(row.household_key, row.id);
+      console.log('enhance:household-upsert', {
+        outreach_list_id: id,
+        household_key: row.household_key,
+        household_id: row.household_id,
+        solo_constituent_id: row.solo_constituent_id,
+        list_household_id: row.id,
+        upsert_path: 'households-batch',
       });
-    }
+    });
 
     debug.steps.push('upsert-members');
 
-    const memberRows = Array.from(households.entries()).flatMap(([householdKey, data]) => {
+    const memberRows = Array.from(households.entries()).flatMap(([_, data]) => {
+      const householdKey = data.householdId != null ? `h:${data.householdId}` : `c:${data.soloConstituentId}`;
       const outreachListHouseholdId = householdIdMap.get(householdKey);
 
       if (!outreachListHouseholdId) {
