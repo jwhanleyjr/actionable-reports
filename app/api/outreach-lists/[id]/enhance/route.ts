@@ -49,8 +49,34 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
 
   const result: EnhanceResult = { enhancedHouseholds: 0, enhancedMembers: 0, notFound: [], errors: [] };
 
+  // Clear previous enhanced rows to keep the operation idempotent and avoid constraint collisions.
+  const { error: deleteMembersError } = await supabase
+    .from('outreach_list_members')
+    .delete()
+    .eq('outreach_list_id', id);
+
+  if (deleteMembersError) {
+    return NextResponse.json({ ok: false, error: deleteMembersError.message }, { status: 500 });
+  }
+
+  const { error: deleteHouseholdsError } = await supabase
+    .from('outreach_list_households')
+    .delete()
+    .eq('outreach_list_id', id);
+
+  if (deleteHouseholdsError) {
+    return NextResponse.json({ ok: false, error: deleteHouseholdsError.message }, { status: 500 });
+  }
+
   const queue = [...(importRows ?? [])];
   const executing: Promise<void>[] = [];
+  const households = new Map<
+    number,
+    {
+      snapshot: Record<string, unknown>;
+      members: Map<number, Record<string, unknown>>;
+    }
+  >();
 
   const processNext = async () => {
     const next = queue.shift();
@@ -83,33 +109,15 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         return;
       }
 
-      const { error: householdError } = await supabase.from('outreach_list_households').upsert({
-        outreach_list_id: id,
-        household_id: householdId,
-        origin: 'import',
-        household_snapshot: householdSnapshot,
-      });
-
-      if (householdError) {
-        result.errors.push(householdError.message);
-        return;
+      const existing = households.get(householdId);
+      if (existing) {
+        existing.members.set(search.constituentId, memberSnapshot);
+      } else {
+        households.set(householdId, {
+          snapshot: householdSnapshot,
+          members: new Map([[search.constituentId, memberSnapshot]]),
+        });
       }
-
-      const { error: memberError } = await supabase.from('outreach_list_members').upsert({
-        outreach_list_id: id,
-        household_id: householdId,
-        constituent_id: search.constituentId,
-        origin: 'import',
-        member_snapshot: memberSnapshot,
-      });
-
-      if (memberError) {
-        result.errors.push(memberError.message);
-        return;
-      }
-
-      result.enhancedHouseholds += 1;
-      result.enhancedMembers += 1;
     } catch (error) {
       result.errors.push(error instanceof Error ? error.message : 'Unknown enhance error');
     }
@@ -125,6 +133,46 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
   }
 
   await Promise.all(executing);
+
+  if (!households.size) {
+    return NextResponse.json({ ok: true, ...result });
+  }
+
+  const householdRows = Array.from(households.entries()).map(([householdId, data]) => ({
+    outreach_list_id: id,
+    household_id: householdId,
+    origin: 'import',
+    household_snapshot: data.snapshot,
+  }));
+
+  const memberRows = Array.from(households.entries()).flatMap(([householdId, data]) =>
+    Array.from(data.members.entries()).map(([constituentId, memberSnapshot]) => ({
+      outreach_list_id: id,
+      household_id: householdId,
+      constituent_id: constituentId,
+      origin: 'import',
+      member_snapshot: memberSnapshot,
+    }))
+  );
+
+  const { error: householdUpsertError } = await supabase
+    .from('outreach_list_households')
+    .upsert(householdRows, { onConflict: 'outreach_list_id,household_id' });
+
+  if (householdUpsertError) {
+    result.errors.push(householdUpsertError.message);
+  }
+
+  const { error: memberUpsertError } = await supabase
+    .from('outreach_list_members')
+    .upsert(memberRows, { onConflict: 'outreach_list_id,household_id,constituent_id' });
+
+  if (memberUpsertError) {
+    result.errors.push(memberUpsertError.message);
+  }
+
+  result.enhancedHouseholds = households.size;
+  result.enhancedMembers = memberRows.length;
 
   return NextResponse.json({ ok: true, ...result });
 }
