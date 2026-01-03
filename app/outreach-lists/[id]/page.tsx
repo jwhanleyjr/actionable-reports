@@ -70,7 +70,10 @@ export default async function OutreachListDetailPage({ params }: { params: { id:
 
   const groupedMembers = new Map<string, OutreachListMember[]>();
   (members ?? []).forEach((member) => {
-    const key = member.outreach_list_household_id || member.member_snapshot?.householdKey || member.id;
+    const householdKey = member.member_snapshot?.householdKey;
+    const key = String(
+      member.outreach_list_household_id ?? (typeof householdKey === 'string' ? householdKey : member.id),
+    );
     const existing = groupedMembers.get(key) ?? [];
     existing.push(member);
     groupedMembers.set(key, existing);
