@@ -209,7 +209,8 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
           return;
         }
 
-        const resolvedHouseholdId = search.resultType === 'Household'
+        const isHouseholdType = search.resultType === 'Household';
+        const resolvedHouseholdId = isHouseholdType
           ? search.householdId
           : Number.isFinite(search.householdId) && (search.householdId as number) > 0
             ? (search.householdId as number)
@@ -718,7 +719,7 @@ function buildMemberSnapshot(constituent: Record<string, unknown>, householdKey:
 }
 
 async function fetchHouseholdDetails(householdId: number, apiKey: string) {
-  const url = new URL(`https://api.bloomerang.co/v2/households/${householdId}`);
+  const url = new URL(`https://api.bloomerang.co/v2/household/${householdId}`);
   const result = await fetchJsonWithModes(url, apiKey);
 
   if (!result.ok) {
@@ -801,7 +802,7 @@ async function fetchHouseholdDetailsWithRetry(
     return response;
   }
 
-  return { ok: false as const, status: undefined, url: `https://api.bloomerang.co/v2/households/${householdId}` };
+  return { ok: false as const, status: undefined, url: `https://api.bloomerang.co/v2/household/${householdId}` };
 }
 
 function sleep(ms: number) {

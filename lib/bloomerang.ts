@@ -79,5 +79,5 @@ export async function getConstituent(accountId: number) {
 }
 
 export async function getHousehold(householdId: number) {
-  return request(`/v2/households/${householdId}`);
+  return request(`/v2/household/${householdId}`);
 }

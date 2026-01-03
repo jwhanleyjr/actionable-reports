@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation';
 
-import { OutreachListHouseholdRow, OutreachListMember } from '../../../components/OutreachListHouseholdRow';
+import { ConstituentDetails, OutreachListHouseholdRow, OutreachListMember } from '../../../components/OutreachListHouseholdRow';
 import { getSupabaseAdmin } from '../../../lib/supabaseAdmin';
 import styles from './styles.module.css';
 
@@ -20,6 +20,12 @@ type OutreachListHousehold = {
   household_id: number | null;
   solo_constituent_id?: number | null;
   household_snapshot: { displayName?: string };
+};
+
+type ConstituentRow = {
+  account_id: number;
+  display_name?: string | null;
+  payload?: Record<string, unknown> | null;
 };
 
 export const dynamic = 'force-dynamic';
@@ -70,6 +76,51 @@ export default async function OutreachListDetailPage({ params }: { params: { id:
     groupedMembers.set(key, existing);
   });
 
+  const memberIds = Array.from(new Set((members ?? []).map((member) => member.constituent_id).filter(Boolean)));
+  let constituentDetails: Map<number, ConstituentDetails> | undefined;
+
+  if (memberIds.length) {
+    const { data: constituentRows } = await supabase
+      .from('constituents')
+      .select('account_id, display_name, payload')
+      .in('account_id', memberIds)
+      .returns<ConstituentRow[]>();
+
+    if (constituentRows?.length) {
+      const detailMap = new Map<number, ConstituentDetails>();
+
+      constituentRows.forEach((row) => {
+        const payload = (row.payload ?? {}) as Record<string, unknown>;
+
+        const getString = (paths: string[]) => {
+          for (const path of paths) {
+            const value = path.split('.').reduce<unknown>((acc, key) => {
+              if (acc && typeof acc === 'object') {
+                return (acc as Record<string, unknown>)[key];
+              }
+              return undefined;
+            }, payload);
+
+            if (typeof value === 'string' && value.trim().length) {
+              return value;
+            }
+          }
+
+          return undefined;
+        };
+
+        const displayName = row.display_name || getString(['FullName', 'Name', 'InformalName', 'FormalName']);
+        const email = getString(['PrimaryEmail.Value', 'PrimaryEmail', 'Email', 'Email.Value']);
+        const phone = getString(['PrimaryPhone.Number', 'PrimaryPhone', 'Phone', 'Phone.Number']);
+        const restrictions = (payload as { CommunicationRestrictions?: unknown }).CommunicationRestrictions;
+
+        detailMap.set(row.account_id, { displayName, email, phone, restrictions });
+      });
+
+      constituentDetails = detailMap;
+    }
+  }
+
   return (
     <main className={styles.page}>
       <div className={styles.shell}>
@@ -102,6 +153,7 @@ export default async function OutreachListDetailPage({ params }: { params: { id:
                 key={household.id}
                 household={household}
                 members={groupedMembers.get(household.id) ?? []}
+                constituentDetails={constituentDetails}
               />
             ))}
           </div>

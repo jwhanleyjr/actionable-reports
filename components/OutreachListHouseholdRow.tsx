@@ -19,6 +19,13 @@ type MemberSnapshot = {
   restrictions?: unknown;
 };
 
+export type ConstituentDetails = {
+  displayName?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  restrictions?: unknown;
+};
+
 export type OutreachListMember = {
   id: string;
   outreach_list_household_id: string;
@@ -38,9 +45,10 @@ export type OutreachListHousehold = {
 type Props = {
   household: OutreachListHousehold;
   members: OutreachListMember[];
+  constituentDetails?: Map<number, ConstituentDetails>;
 };
 
-export function OutreachListHouseholdRow({ household, members }: Props) {
+export function OutreachListHouseholdRow({ household, members, constituentDetails }: Props) {
   const [expanded, setExpanded] = useState(false);
 
   const title =
@@ -60,21 +68,27 @@ export function OutreachListHouseholdRow({ household, members }: Props) {
 
       {expanded ? (
         <div className={styles.members}>
-          {members.map((member) => (
-            <div key={member.id} className={styles.memberCard}>
-              <div className={styles.memberName}>{member.member_snapshot?.displayName || `Constituent ${member.constituent_id}`}</div>
-              <div className={styles.memberMeta}>
-                {member.member_snapshot?.email ? (
-                  <a href={`mailto:${member.member_snapshot.email}`}>{member.member_snapshot.email}</a>
-                ) : (
-                  <span>No email</span>
-                )}
-                <span>•</span>
-                <span>{member.member_snapshot?.phone || 'No phone'}</span>
-              </div>
-              {member.member_snapshot?.restrictions ? (
-                <div className={styles.restrictions}>Restrictions: {String(member.member_snapshot.restrictions)}</div>
-              ) : null}
+          {members.map((member) => {
+            const fallback = constituentDetails?.get(member.constituent_id);
+            const displayName =
+              member.member_snapshot?.displayName ||
+              fallback?.displayName ||
+              `Constituent ${member.constituent_id}`;
+            const email = member.member_snapshot?.email || fallback?.email || undefined;
+            const phone = member.member_snapshot?.phone || fallback?.phone || undefined;
+            const restrictions = member.member_snapshot?.restrictions ?? fallback?.restrictions;
+
+            return (
+              <div key={member.id} className={styles.memberCard}>
+                <div className={styles.memberName}>{displayName}</div>
+                <div className={styles.memberMeta}>
+                  {email ? <a href={`mailto:${email}`}>{email}</a> : <span>No email</span>}
+                  <span>•</span>
+                  <span>{phone || 'No phone'}</span>
+                </div>
+                {restrictions ? (
+                  <div className={styles.restrictions}>Restrictions: {String(restrictions)}</div>
+                ) : null}
               <div className={styles.actions}>
                 {getMemberActions({ enableNote: true, enableTask: true }).map((action) => (
                   <button
@@ -87,9 +101,9 @@ export function OutreachListHouseholdRow({ household, members }: Props) {
                       console.log(`action:${action.key}`, {
                         constituentId: member.constituent_id,
                         householdId: member.household_id,
-                        displayName: member.member_snapshot?.displayName,
+                        displayName,
                       });
-                      alert(`${action.label} coming soon for ${member.member_snapshot?.displayName ?? member.constituent_id}`);
+                      alert(`${action.label} coming soon for ${displayName ?? member.constituent_id}`);
                     }}
                     disabled={!action.enabled}
                   >
@@ -98,7 +112,8 @@ export function OutreachListHouseholdRow({ household, members }: Props) {
                 ))}
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       ) : null}
     </div>
