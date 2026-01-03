@@ -152,13 +152,27 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
   let householdError: string | undefined;
   let householdUrl: string | undefined;
 
-  if (!memberIds.length && Number.isFinite(householdId)) {
+  if (Number.isFinite(householdId)) {
+    logDebug('householdFocus:householdFetchStart', {
+      outreachListId: id,
+      householdKey,
+      householdId,
+      existingMemberCount: memberIds.length,
+    });
+
     const householdResult = await fetchHouseholdDetails(householdId as number, apiKey);
 
     if (householdResult.ok) {
       householdPayload = householdResult.household;
       householdUrl = householdResult.url;
-      memberIds = householdResult.memberIds;
+
+      if (!memberIds.length) {
+        memberIds = householdResult.memberIds;
+      } else if (householdResult.memberIds.length) {
+        const merged = new Set([...memberIds, ...householdResult.memberIds]);
+        memberIds = Array.from(merged);
+      }
+
       logDebug('householdFocus:householdFetched', {
         outreachListId: id,
         householdKey,
