@@ -13,6 +13,16 @@ type EnhanceResult = {
   errors: string[];
 };
 
+type HouseholdAccumulator = {
+  householdId: number | null;
+  soloConstituentId: number | null;
+  snapshot: Record<string, unknown>;
+  members: Map<number, Record<string, unknown>>;
+  memberIds: Set<number>;
+  householdType?: string;
+  hasSearchMemberIds?: boolean;
+};
+
 export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
   const debug: {
     steps: string[];
@@ -146,18 +156,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     debug.counts.mapped = queue.length;
 
     const executing: Promise<void>[] = [];
-    const households = new Map<
-      string,
-      {
-        householdId: number | null;
-        soloConstituentId: number | null;
-        snapshot: Record<string, unknown>;
-        members: Map<number, Record<string, unknown>>;
-        memberIds: Set<number>;
-        householdType?: string;
-        hasSearchMemberIds?: boolean;
-      }
-    >();
+    const households = new Map<string, HouseholdAccumulator>();
     const memberAccountNumbers = new Map<number, string>();
 
     debug.steps.push('bloomerang-search');
@@ -370,6 +369,14 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       if (firstIds.length) {
         debug.sample.fetchedHouseholdIds = firstIds;
       }
+    }
+
+    debug.steps.push('enrich-member-profiles');
+
+    const enrichmentResult = await enrichMemberProfiles(households, apiKey, concurrency);
+
+    if (enrichmentResult.errors.length) {
+      result.errors.push(...enrichmentResult.errors);
     }
 
     debug.steps.push('build-households');
@@ -592,7 +599,11 @@ function computeMemberDisplayName(
   return id ? `Constituent ${id}` : 'Constituent';
 }
 
-function buildMemberSnapshot(constituent: Record<string, unknown>, householdKey: string) {
+function buildMemberSnapshot(
+  constituent: Record<string, unknown>,
+  householdKey: string,
+  source: string = 'bloomerang-search'
+) {
   const displayName = computeMemberDisplayName(constituent);
   const email = pickString(constituent, ['Email', 'PrimaryEmail', 'email']);
   const phone = pickString(constituent, ['Phone', 'PrimaryPhone', 'phone']);
@@ -602,8 +613,85 @@ function buildMemberSnapshot(constituent: Record<string, unknown>, householdKey:
     email,
     phone,
     householdKey,
-    source: 'bloomerang-search',
+    source,
   };
+}
+
+async function enrichMemberProfiles(
+  households: Map<string, HouseholdAccumulator>,
+  apiKey: string,
+  concurrency: number
+) {
+  const errors: string[] = [];
+  const tasks: { householdKey: string; memberId: number }[] = [];
+
+  households.forEach((household, householdKey) => {
+    household.memberIds.forEach((memberId) => {
+      const snapshot = household.members.get(memberId);
+
+      if (shouldEnrichMemberSnapshot(snapshot)) {
+        tasks.push({ householdKey, memberId });
+      }
+    });
+  });
+
+  if (!tasks.length) {
+    return { errors };
+  }
+
+  const queue = [...tasks];
+  const workers = Math.max(1, Math.min(queue.length, Math.min(concurrency, 5)));
+
+  const work = async () => {
+    while (queue.length) {
+      const next = queue.shift();
+      if (!next) break;
+
+      const { householdKey, memberId } = next;
+      const household = households.get(householdKey);
+
+      if (!household) continue;
+
+      const profile = await fetchConstituentProfile(memberId, apiKey);
+
+      if (!profile.ok) {
+        errors.push(`Failed to load constituent ${memberId}: ${profile.error}`);
+        continue;
+      }
+
+      const snapshot = buildMemberSnapshot(profile.constituent, householdKey, 'bloomerang-constituent');
+      household.members.set(memberId, snapshot);
+    }
+  };
+
+  await Promise.all(Array.from({ length: workers }, () => work()));
+
+  return { errors };
+}
+
+function shouldEnrichMemberSnapshot(snapshot: Record<string, unknown> | undefined) {
+  const displayName = pickString(snapshot ?? {}, ['displayName']);
+  const email = pickString(snapshot ?? {}, ['email']);
+  const phone = pickString(snapshot ?? {}, ['phone']);
+
+  const missingDisplayName = !displayName || displayName.startsWith('Constituent');
+
+  return missingDisplayName || !email || !phone;
+}
+
+async function fetchConstituentProfile(constituentId: number, apiKey: string) {
+  const url = new URL(`https://api.bloomerang.co/v2/constituent/${constituentId}`);
+  const result = await fetchJsonWithModes(url, apiKey);
+
+  if (!result.ok) {
+    return {
+      ok: false as const,
+      error: result.error ?? result.bodyPreview ?? 'Unable to load constituent.',
+      status: result.status,
+    };
+  }
+
+  return { ok: true as const, constituent: (result.data as Record<string, unknown>) ?? {} };
 }
 
 async function fetchHouseholdDetails(householdId: number, apiKey: string) {
