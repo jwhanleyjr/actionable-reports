@@ -1,13 +1,26 @@
 import Link from 'next/link';
+
+import { getSupabaseAdmin } from '../lib/supabaseAdmin';
 import styles from './home.module.css';
+
+type OutreachListCard = {
+  id: string;
+  name: string;
+  goal: string | null;
+  stage: string | null;
+  households: number;
+};
+
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 const actionCards = [
   {
     title: 'Upload Excel',
-    description: 'Import a spreadsheet to build a call queue from existing donor data.',
+    description: 'Import a spreadsheet to build an outreach list from existing donor data.',
     cta: 'Upload file',
-    href: '#',
-    comingSoon: true,
+    href: '/outreach-lists/new/import',
+    comingSoon: false,
   },
   {
     title: 'Manual List',
@@ -25,28 +38,45 @@ const actionCards = [
   },
 ];
 
-const campaigns = [
-  {
-    name: 'Fall Stewardship Calls',
-    status: 'Active',
-    progress: '65% complete',
-    leads: 42,
-  },
-  {
-    name: 'Lapsed Donor Outreach',
-    status: 'Paused',
-    progress: 'Reopening soon',
-    leads: 18,
-  },
-  {
-    name: 'Major Gift Prospects',
-    status: 'Draft',
-    progress: 'Planning engagement',
-    leads: 12,
-  },
-];
+async function fetchLatestOutreachLists(): Promise<OutreachListCard[]> {
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    return [];
+  }
 
-export default function Home() {
+  const supabase = getSupabaseAdmin();
+  const { data: lists } = await supabase
+    .from('outreach_lists')
+    .select('id, name, goal, stage, updated_at')
+    .order('updated_at', { ascending: false })
+    .limit(6);
+
+  if (!lists?.length) {
+    return [];
+  }
+
+  const results: OutreachListCard[] = [];
+
+  for (const list of lists) {
+    const { count } = await supabase
+      .from('outreach_list_households')
+      .select('id', { count: 'exact', head: true })
+      .eq('outreach_list_id', list.id);
+
+    results.push({
+      id: list.id,
+      name: list.name,
+      goal: list.goal,
+      stage: list.stage,
+      households: count ?? 0,
+    });
+  }
+
+  return results;
+}
+
+export default async function Home() {
+  const outreachLists = await fetchLatestOutreachLists();
+
   return (
     <main className={styles.page}>
       <div className={styles.shell}>
@@ -87,26 +117,33 @@ export default function Home() {
         <section className={styles.campaignsSection}>
           <div className={styles.sectionHeader}>
             <div>
-              <p className={styles.kicker}>Current Campaigns</p>
-              <h2 className={styles.sectionTitle}>Stay aligned with active calling efforts</h2>
+              <p className={styles.kicker}>Outreach Lists</p>
+              <h2 className={styles.sectionTitle}>Stay aligned with active outreach efforts</h2>
             </div>
-            <button type="button" className={styles.ghostButton}>
-              New Campaign
-            </button>
+            <Link className={styles.ghostButton} href="/outreach-lists/new/import">
+              New Outreach List
+            </Link>
           </div>
 
-          <div className={styles.campaignGrid}>
-            {campaigns.map((campaign) => (
-              <div key={campaign.name} className={styles.campaignCard}>
-                <div className={styles.cardHeaderRow}>
-                  <h3 className={styles.cardTitle}>{campaign.name}</h3>
-                  <span className={styles.statusBadge}>{campaign.status}</span>
+          {outreachLists.length ? (
+            <div className={styles.campaignGrid}>
+              {outreachLists.map((list) => (
+                <div key={list.id} className={styles.campaignCard}>
+                  <div className={styles.cardHeaderRow}>
+                    <h3 className={styles.cardTitle}>{list.name}</h3>
+                    <span className={styles.statusBadge}>{list.stage ?? 'Draft'}</span>
+                  </div>
+                  <p className={styles.cardDescription}>{list.goal ?? 'Goal not set'}</p>
+                  <p className={styles.metaText}>{list.households} households queued</p>
+                  <Link className={styles.primaryButton} href={`/outreach-lists/${list.id}`}>
+                    View list
+                  </Link>
                 </div>
-                <p className={styles.cardDescription}>{campaign.progress}</p>
-                <p className={styles.metaText}>{campaign.leads} people queued</p>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          ) : (
+            <div className={styles.emptyState}>No outreach lists yet. Start by uploading an Excel file.</div>
+          )}
         </section>
       </div>
     </main>

@@ -1,0 +1,90 @@
+.page {
+  min-height: 100vh;
+  padding: 48px 0 96px;
+  background: #eef2f6;
+}
+
+.shell {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 0 24px;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 32px;
+}
+
+.kicker {
+  letter-spacing: 0.1em;
+  font-size: 12px;
+  color: #6b7280;
+  margin-bottom: 4px;
+}
+
+.title {
+  font-size: 32px;
+  font-weight: 700;
+}
+
+.pills {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.pill {
+  background: #dbeafe;
+  color: #1d4ed8;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-weight: 600;
+}
+
+.pillMuted {
+  background: #e5e7eb;
+  color: #374151;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-weight: 600;
+}
+
+.primaryButton {
+  background: #2563eb;
+  color: #fff;
+  padding: 12px 18px;
+  border-radius: 10px;
+  border: none;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.section {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 20px;
+}
+
+.sectionHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 16px;
+}
+
+.sectionTitle {
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.counts {
+  color: #6b7280;
+}
+
+.list {
+  display: grid;
+  gap: 12px;
+}
