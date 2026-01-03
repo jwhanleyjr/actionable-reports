@@ -168,11 +168,17 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
           debug.counts.searched = (debug.counts.searched ?? 0) + 1;
         }
 
+        if (!search.ok) {
+          console.log('enhance:search-miss', { outreach_list_id: id, account_number: next.account_number });
+          result.notFound.push(next.account_number);
+          return;
+        }
+
         if (search.resultType === 'Household') {
           debug.counts.searchHouseholdType = (debug.counts.searchHouseholdType ?? 0) + 1;
         }
 
-        if (!search.ok || (!search.constituentId && search.resultType !== 'Household')) {
+        if (!search.constituentId && search.resultType !== 'Household') {
           console.log('enhance:search-miss', { outreach_list_id: id, account_number: next.account_number });
           result.notFound.push(next.account_number);
           return;
