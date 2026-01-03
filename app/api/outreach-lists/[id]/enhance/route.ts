@@ -13,11 +13,23 @@ type EnhanceResult = {
   errors: string[];
 };
 
+type MemberSnapshot = {
+  displayName: string;
+  householdKey: string;
+  source: string;
+  email?: string;
+  phone?: string;
+  householdId?: number | null;
+  restrictions?: unknown;
+  headOfHousehold?: boolean;
+  constituentId?: number;
+};
+
 type HouseholdGroup = {
   householdId: number | null;
   soloConstituentId: number | null;
   snapshot: Record<string, unknown>;
-  members: Map<number, Record<string, unknown>>;
+  members: Map<number, MemberSnapshot>;
   memberIds: Set<number>;
   householdType?: string;
   hasSearchMemberIds?: boolean;
@@ -691,7 +703,7 @@ function buildHouseholdSnapshot(constituent: Record<string, unknown>, householdI
   };
 }
 
-function buildMemberSnapshot(constituent: Record<string, unknown>, householdKey: string) {
+function buildMemberSnapshot(constituent: Record<string, unknown>, householdKey: string): MemberSnapshot {
   const displayName = pickString(constituent, ['FullName', 'Name', 'name']) || 'Constituent';
   const email = pickString(constituent, ['Email', 'PrimaryEmail', 'email']);
   const phone = pickString(constituent, ['Phone', 'PrimaryPhone', 'phone']);
@@ -809,7 +821,7 @@ function buildHouseholdSnapshotFromHousehold(household: Record<string, unknown>,
   };
 }
 
-function buildMemberSnapshotFromId(constituentId: number, householdKey: string) {
+function buildMemberSnapshotFromId(constituentId: number, householdKey: string): MemberSnapshot {
   return {
     displayName: `Constituent ${constituentId}`,
     householdKey,
@@ -817,7 +829,11 @@ function buildMemberSnapshotFromId(constituentId: number, householdKey: string) 
   };
 }
 
-function buildMemberSnapshotFromPayload(constituent: HydratedConstituent, householdKey: string, headId: number | null) {
+function buildMemberSnapshotFromPayload(
+  constituent: HydratedConstituent,
+  householdKey: string,
+  headId: number | null
+): MemberSnapshot {
   return {
     constituentId: constituent.id,
     displayName: constituent.displayName,
