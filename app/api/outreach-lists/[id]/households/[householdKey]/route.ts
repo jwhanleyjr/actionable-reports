@@ -6,13 +6,13 @@ import {
   HouseholdStatus,
   summarizeTransactions,
   Transaction,
-} from '../../../../../bloomerang/giving-stats/service';
+} from '../../../../bloomerang/giving-stats/service';
 import {
   fetchJsonWithModes,
   getApiKey,
   pickNumber,
   pickString,
-} from '../../../../../bloomerang/utils';
+} from '../../../../bloomerang/utils';
 import { getActiveTasksForConstituent } from '../../../../../../lib/bloomerangTasks';
 import { getSupabaseAdmin } from '../../../../../../lib/supabaseAdmin';
 import { BloomerangTask } from '../../../../../../types/bloomerang';
