@@ -45,10 +45,15 @@ export function OutreachListHouseholdRow({ household, members, constituentDetail
   const [expanded, setExpanded] = useState(false);
 
   const householdSnapshot = (household.household_snapshot ?? {}) as Record<string, unknown>;
-  const title =
+  const rawTitle =
     pickString(householdSnapshot, ['displayName', 'DisplayName', 'Name', 'HouseholdName']) ||
-    members[0]?.member_snapshot?.displayName ||
-    (household.household_id ? `Household ${household.household_id}` : 'Household');
+    members[0]?.member_snapshot?.displayName;
+  const title =
+    typeof rawTitle === 'string' && rawTitle.trim()
+      ? rawTitle.trim()
+      : household.household_id
+        ? `Household ${household.household_id}`
+        : 'Household';
 
   const pillSummary = household.household_id
     ? `Household ID: ${household.household_id}`
