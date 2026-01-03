@@ -4,21 +4,13 @@ import { useState } from 'react';
 
 import { MemberActionIconButton } from '@/app/search/MemberActionIconButton';
 import { getMemberActions } from '@/lib/memberActions';
+import { buildMemberName, pickString, readValue } from '@/lib/memberDisplay';
 
 import styles from './OutreachListHouseholdRow.module.css';
 
-type HouseholdSnapshot = {
-  displayName?: string;
-  householdId?: number;
-};
+type HouseholdSnapshot = Record<string, unknown>;
 
-type MemberSnapshot = {
-  displayName?: string;
-  email?: string;
-  phone?: string;
-  householdKey?: string;
-  restrictions?: unknown;
-};
+type MemberSnapshot = Record<string, unknown>;
 
 export type ConstituentDetails = {
   displayName?: string | null;
@@ -52,8 +44,9 @@ type Props = {
 export function OutreachListHouseholdRow({ household, members, constituentDetails }: Props) {
   const [expanded, setExpanded] = useState(false);
 
+  const householdSnapshot = (household.household_snapshot ?? {}) as Record<string, unknown>;
   const title =
-    household.household_snapshot?.displayName ||
+    pickString(householdSnapshot, ['displayName', 'DisplayName', 'Name', 'HouseholdName']) ||
     members[0]?.member_snapshot?.displayName ||
     (household.household_id ? `Household ${household.household_id}` : 'Household');
 
@@ -86,14 +79,17 @@ export function OutreachListHouseholdRow({ household, members, constituentDetail
         <div className={styles.members}>
           <div className={styles.memberListLabel}>Household Members</div>
           {members.map((member) => {
+            const snapshot = (member.member_snapshot ?? {}) as Record<string, unknown>;
             const fallback = constituentDetails?.get(member.constituent_id);
             const displayName =
-              member.member_snapshot?.displayName ||
+              pickString(snapshot, ['displayName', 'DisplayName', 'fullName', 'FullName']) ||
               fallback?.displayName ||
-              `Constituent ${member.constituent_id}`;
-            const email = member.member_snapshot?.email || fallback?.email || undefined;
-            const phone = member.member_snapshot?.phone || fallback?.phone || undefined;
-            const restrictions = member.member_snapshot?.restrictions ?? fallback?.restrictions;
+              buildMemberName(snapshot, member.constituent_id);
+            const email =
+              pickString(snapshot, ['email', 'Email', 'PrimaryEmail', 'PrimaryEmail.Value']) || fallback?.email || undefined;
+            const phone =
+              pickString(snapshot, ['phone', 'Phone', 'PrimaryPhone', 'PrimaryPhone.Number']) || fallback?.phone || undefined;
+            const restrictions = readValue(snapshot, 'restrictions') ?? fallback?.restrictions;
 
             const emailLink = email ? `mailto:${encodeURIComponent(email)}` : undefined;
 
