@@ -94,11 +94,29 @@ type CombinedSearchResult = {
   message?: string;
 };
 
-export default function SearchPage() {
+type SearchPageProps = {
+  mode?: 'search' | 'householdFocus';
+  initialResult?: CombinedSearchResult | null;
+  profileUrl?: string | null;
+  outreachContext?: {
+    goal?: string | null;
+    description?: string | null;
+    name?: string | null;
+    breadcrumbHref?: string | null;
+    breadcrumbLabel?: string | null;
+  };
+};
+
+export function SearchWorkspace({
+  mode = 'search',
+  initialResult = null,
+  profileUrl = null,
+  outreachContext,
+}: SearchPageProps) {
   const [accountNumber, setAccountNumber] = useState('');
-  const [result, setResult] = useState<CombinedSearchResult | null>(null);
+  const [result, setResult] = useState<CombinedSearchResult | null>(initialResult ?? null);
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(mode === 'householdFocus');
   const [activitySummary, setActivitySummary] = useState<ActivitySummary | null>(null);
   const [activityLoading, setActivityLoading] = useState(false);
   const [interactionModalMember, setInteractionModalMember] = useState<MemberWithStats | null>(null);
@@ -160,6 +178,58 @@ export default function SearchPage() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    let isMounted = true;
+
+    if (mode !== 'householdFocus') {
+      return () => {
+        isMounted = false;
+      };
+    }
+
+    if (!profileUrl) {
+      setLoading(false);
+      return () => {
+        isMounted = false;
+      };
+    }
+
+    const loadHouseholdProfile = async () => {
+      setLoading(true);
+      setError(null);
+
+      try {
+        const response = await fetch(profileUrl);
+        const payload = await response.json() as CombinedSearchResult;
+
+        if (!isMounted) return;
+
+        if (!response.ok || !payload.ok) {
+          setError(payload.bodyPreview || payload.error || 'Unable to load household.');
+          setResult(payload);
+          return;
+        }
+
+        setResult(payload);
+      } catch (err) {
+        console.error('Household focus load failed', err);
+        if (isMounted) {
+          setError('Unable to load household.');
+        }
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
+      }
+    };
+
+    void loadHouseholdProfile();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [mode, profileUrl]);
 
   const memberIds = (result?.members ?? [])
     .map((member) => member.constituentId)
@@ -438,36 +508,62 @@ export default function SearchPage() {
 
         <div className={styles.card}>
           <header className={styles.header}>
+            {outreachContext?.breadcrumbHref ? (
+              <a className={styles.breadcrumb} href={outreachContext.breadcrumbHref}>
+                {outreachContext.breadcrumbLabel ?? 'Back to outreach list'}
+              </a>
+            ) : null}
             <p className={styles.kicker}>Campaign Workspace</p>
-            <h1 className={styles.title}>Bloomerang Search Tester</h1>
+            <h1 className={styles.title}>
+              {mode === 'householdFocus' ? 'Household Focus' : 'Bloomerang Search Tester'}
+            </h1>
             <p className={styles.subtitle}>
-              Enter an account number to query Bloomerang and review the household profile with giving stats.
+              {mode === 'householdFocus'
+                ? 'Review the outreach household profile with giving stats and recent activity.'
+                : 'Enter an account number to query Bloomerang and review the household profile with giving stats.'}
             </p>
           </header>
 
-          <form className={styles.form} onSubmit={handleSubmit}>
-            <div className={styles.field}>
-              <label className={styles.label} htmlFor="accountNumber">
-                Account Number
-              </label>
-              <input
-                id="accountNumber"
-                name="accountNumber"
-                type="text"
-                autoComplete="off"
-                value={accountNumber}
-                onChange={(event) => setAccountNumber(event.target.value)}
-                placeholder="2872456"
-                className={styles.input}
-              />
-            </div>
+          {mode === 'search' ? (
+            <form className={styles.form} onSubmit={handleSubmit}>
+              <div className={styles.field}>
+                <label className={styles.label} htmlFor="accountNumber">
+                  Account Number
+                </label>
+                <input
+                  id="accountNumber"
+                  name="accountNumber"
+                  type="text"
+                  autoComplete="off"
+                  value={accountNumber}
+                  onChange={(event) => setAccountNumber(event.target.value)}
+                  placeholder="2872456"
+                  className={styles.input}
+                />
+              </div>
 
-            <button type="submit" className={styles.button} disabled={loading}>
-              {loading ? 'Searching…' : 'Search'}
-            </button>
-          </form>
+              <button type="submit" className={styles.button} disabled={loading}>
+                {loading ? 'Searching…' : 'Search'}
+              </button>
+            </form>
+          ) : null}
 
           {error && <div className={styles.error}>{error}</div>}
+
+          {mode === 'householdFocus' && outreachContext ? (
+            <div className={styles.contextBox}>
+              <div className={styles.contextHeader}>
+                <div>
+                  <p className={styles.kicker}>Outreach Context</p>
+                  <h2 className={styles.contextTitle}>{outreachContext.name ?? 'Outreach List'}</h2>
+                </div>
+                {outreachContext.goal ? <span className={styles.pill}>{outreachContext.goal}</span> : null}
+              </div>
+              {outreachContext.description ? (
+                <p className={styles.contextDescription}>{outreachContext.description}</p>
+              ) : null}
+            </div>
+          ) : null}
 
           <div className={styles.outputStack}>
             <div className={styles.output}>
@@ -912,6 +1008,10 @@ export default function SearchPage() {
       {toastMessage ? <div className={styles.toast}>{toastMessage}</div> : null}
     </main>
   );
+}
+
+export default function SearchPage() {
+  return <SearchWorkspace />;
 }
 
 const LIFECYCLE_TOOLTIPS: Record<HouseholdStatus['lifecycle'], string> = {

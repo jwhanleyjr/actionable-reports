@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 
 import styles from './OutreachListHouseholdRow.module.css';
 
@@ -33,46 +33,40 @@ export type OutreachListHousehold = {
 };
 
 type Props = {
+  listId: string;
   household: OutreachListHousehold;
   members: OutreachListMember[];
 };
 
-export function OutreachListHouseholdRow({ household, members }: Props) {
-  const [expanded, setExpanded] = useState(false);
+export function OutreachListHouseholdRow({ listId, household, members }: Props) {
+  const router = useRouter();
 
   const title =
     household.household_snapshot?.displayName ||
     members[0]?.member_snapshot?.displayName ||
     (household.household_id ? `Household ${household.household_id}` : 'Household');
 
+  const householdKey = household.household_key
+    || (household.household_id ? `h:${household.household_id}`
+      : household.solo_constituent_id ? `c:${household.solo_constituent_id}`
+        : members[0]?.constituent_id ? `c:${members[0].constituent_id}`
+          : household.household_snapshot?.householdId ? `h:${household.household_snapshot.householdId}` : null);
+
+  const handleNavigate = () => {
+    if (!householdKey) return;
+
+    router.push(`/outreach-lists/${listId}/households/${encodeURIComponent(householdKey)}`);
+  };
+
   return (
     <div className={styles.card}>
-      <button className={styles.rowButton} type="button" onClick={() => setExpanded((prev) => !prev)}>
+      <button className={styles.rowButton} type="button" onClick={handleNavigate}>
         <div>
           <div className={styles.householdName}>{title}</div>
           <div className={styles.meta}>{members.length} member{members.length === 1 ? '' : 's'}</div>
         </div>
-        <div className={styles.chevron}>{expanded ? '−' : '+'}</div>
+        <div className={styles.chevron}>→</div>
       </button>
-
-      {expanded ? (
-        <div className={styles.members}>
-          {members.map((member) => (
-            <div key={member.id} className={styles.memberCard}>
-              <div className={styles.memberName}>{member.member_snapshot?.displayName || `Constituent ${member.constituent_id}`}</div>
-              <div className={styles.memberMeta}>
-                {member.member_snapshot?.email ? (
-                  <a href={`mailto:${member.member_snapshot.email}`}>{member.member_snapshot.email}</a>
-                ) : (
-                  <span>No email</span>
-                )}
-                <span>•</span>
-                <span>{member.member_snapshot?.phone || 'No phone'}</span>
-              </div>
-            </div>
-          ))}
-        </div>
-      ) : null}
     </div>
   );
 }

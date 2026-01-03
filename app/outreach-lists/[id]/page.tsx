@@ -98,6 +98,7 @@ export default async function OutreachListDetailPage({ params }: { params: { id:
             {(households ?? []).map((household) => (
               <OutreachListHouseholdRow
                 key={household.id}
+                listId={list.id}
                 household={household}
                 members={groupedMembers.get(household.id) ?? []}
               />

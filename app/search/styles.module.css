@@ -154,6 +154,42 @@
   margin-bottom: 12px;
 }
 
+.breadcrumb {
+  display: inline-block;
+  margin-bottom: 6px;
+  color: #2563eb;
+  text-decoration: none;
+}
+
+.breadcrumb:hover {
+  text-decoration: underline;
+}
+
+.contextBox {
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  background: #f9fafb;
+}
+
+.contextHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.contextTitle {
+  margin: 0;
+  font-size: 18px;
+}
+
+.contextDescription {
+  margin: 8px 0 0;
+  color: #4b5563;
+}
+
 .output {
   margin-top: 12px;
   background: #f8fafc;
