@@ -78,40 +78,67 @@ export function OutreachListHouseholdRow({ household, members, constituentDetail
             const phone = member.member_snapshot?.phone || fallback?.phone || undefined;
             const restrictions = member.member_snapshot?.restrictions ?? fallback?.restrictions;
 
+            const emailLink = email ? `mailto:${encodeURIComponent(email)}` : undefined;
+
+            const memberActions = getMemberActions({ enableNote: true, enableTask: true });
+
             return (
               <div key={member.id} className={styles.memberCard}>
-                <div className={styles.memberName}>{displayName}</div>
-                <div className={styles.memberMeta}>
-                  {email ? <a href={`mailto:${email}`}>{email}</a> : <span>No email</span>}
-                  <span>•</span>
-                  <span>{phone || 'No phone'}</span>
+                <div className={styles.memberHeader}>
+                  <div>
+                    <div className={styles.memberName}>{displayName}</div>
+                    <div className={styles.memberMeta}>
+                      <span className={styles.metaPill}>ID: {member.constituent_id}</span>
+                      {phone ? (
+                        <span className={styles.metaPill}>Phone: {phone}</span>
+                      ) : (
+                        <span className={`${styles.metaPill} ${styles.metaPillMuted}`}>No phone</span>
+                      )}
+                      {email ? (
+                        <span className={styles.metaPill}>
+                          Email: {emailLink ? (
+                            <a href={emailLink} className={styles.metaLink}>
+                              {email}
+                            </a>
+                          ) : (
+                            email
+                          )}
+                        </span>
+                      ) : (
+                        <span className={`${styles.metaPill} ${styles.metaPillMuted}`}>No email</span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className={styles.memberActions}>
+                    {memberActions.map((action) => (
+                      <button
+                        key={action.key}
+                        type="button"
+                        className={`${styles.actionButton} ${styles.actionButtonGhost}`}
+                        title={action.label}
+                        onClick={() => {
+                          // Placeholder actions until full modals are wired up
+                          console.log(`action:${action.key}`, {
+                            constituentId: member.constituent_id,
+                            householdId: member.household_id,
+                            displayName,
+                          });
+                          alert(`${action.label} coming soon for ${displayName ?? member.constituent_id}`);
+                        }}
+                        disabled={!action.enabled}
+                        aria-label={`${action.label} for ${displayName}`}
+                      >
+                        <span className={styles.actionIcon}>{action.icon}</span>
+                      </button>
+                    ))}
+                  </div>
                 </div>
+
                 {restrictions ? (
                   <div className={styles.restrictions}>Restrictions: {String(restrictions)}</div>
                 ) : null}
-              <div className={styles.actions}>
-                {getMemberActions({ enableNote: true, enableTask: true }).map((action) => (
-                  <button
-                    key={action.key}
-                    type="button"
-                    className={styles.actionButton}
-                    title={action.label}
-                    onClick={() => {
-                      // Placeholder actions until full modals are wired up
-                      console.log(`action:${action.key}`, {
-                        constituentId: member.constituent_id,
-                        householdId: member.household_id,
-                        displayName,
-                      });
-                      alert(`${action.label} coming soon for ${displayName ?? member.constituent_id}`);
-                    }}
-                    disabled={!action.enabled}
-                  >
-                    <span className={styles.actionIcon}>{action.icon}</span>
-                  </button>
-                ))}
               </div>
-            </div>
             );
           })}
         </div>

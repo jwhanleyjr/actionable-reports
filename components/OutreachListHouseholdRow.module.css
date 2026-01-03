@@ -44,19 +44,28 @@
   padding: 12px;
   border: 1px solid #e5e7eb;
   border-radius: 10px;
-  background: #f9fafb;
+  background: #ffffff;
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.04);
+}
+
+.memberHeader {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
 }
 
 .memberName {
-  font-weight: 600;
+  font-weight: 800;
+  color: #1f2937;
 }
 
 .memberMeta {
   display: flex;
   gap: 8px;
-  color: #4b5565;
+  flex-wrap: wrap;
+  color: #1f2937;
   font-size: 14px;
-  margin-top: 4px;
+  margin-top: 6px;
 }
 
 .restrictions {
@@ -65,10 +74,39 @@
   font-size: 13px;
 }
 
-.actions {
-  margin-top: 10px;
+.memberActions {
+  margin-left: auto;
   display: flex;
   gap: 6px;
+  align-items: center;
+}
+
+.metaPill {
+  background: #e6f2fa;
+  color: #1e83b5;
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-weight: 700;
+  font-size: 13px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.metaPillMuted {
+  background: #f1f5f9;
+  color: #94a3b8;
+  border: 1px dashed #cbd5e1;
+}
+
+.metaLink {
+  color: inherit;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.metaLink:hover {
+  text-decoration: underline;
 }
 
 .actionButton {
@@ -77,11 +115,15 @@
   justify-content: center;
   width: 36px;
   height: 36px;
-  border: 1px solid #e5e7eb;
+  border: 1px solid #e2e8f0;
   border-radius: 8px;
   background: #fff;
   cursor: pointer;
   transition: all 0.15s ease;
+}
+
+.actionButtonGhost {
+  background: #f8fafc;
 }
 
 .actionButton:hover {
