@@ -26,6 +26,8 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       realHouseholds?: number;
       soloHouseholds?: number;
       householdFetchSuccess?: number;
+      householdFetchAttempted?: number;
+      householdFetchFailed?: number;
       avgMembersPerHousehold?: number;
       membersInserted?: number;
     };
@@ -34,6 +36,11 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       firstConstituentId?: number;
       firstHouseholdId?: number;
       firstKey?: string;
+      fetchedHouseholdIds?: number[];
+    };
+    householdFetch?: {
+      statusCounts: Record<string, number>;
+      sampleFailures: { householdId: number; url: string; status?: number; bodySnippet?: string }[];
     };
   } = { steps: [], counts: {}, sample: {} };
 
@@ -148,6 +155,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         members: Map<number, Record<string, unknown>>;
         memberIds: Set<number>;
         householdType?: string;
+        hasSearchMemberIds?: boolean;
       }
     >();
     const memberAccountNumbers = new Map<number, string>();
@@ -201,6 +209,11 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         const householdSnapshot = buildHouseholdSnapshot(search.constituent, resolvedHouseholdId);
         const memberSnapshot = constituentId ? buildMemberSnapshot(search.constituent, householdKey) : null;
 
+        const memberIdsFromSearch: number[] =
+          search.resultType === 'Household' && Array.isArray((search.constituent as { MemberIds?: unknown[] }).MemberIds)
+            ? (search.constituent as { MemberIds: unknown[] }).MemberIds.filter((id) => Number.isFinite(id)).map((id) => Number(id))
+            : [];
+
         if (constituentId) {
           memberAccountNumbers.set(constituentId, next.account_number);
         }
@@ -240,14 +253,23 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
             existing.members.set(constituentId, memberSnapshot);
             existing.memberIds.add(constituentId);
           }
+          if (memberIdsFromSearch.length) {
+            memberIdsFromSearch.forEach((memberId) => existing.memberIds.add(memberId));
+            existing.hasSearchMemberIds = true;
+          }
         } else {
           households.set(householdKey, {
             householdId: resolvedHouseholdId,
             soloConstituentId: resolvedHouseholdId ? null : constituentId,
             snapshot: householdSnapshot,
             members: constituentId && memberSnapshot ? new Map([[constituentId, memberSnapshot]]) : new Map(),
-            memberIds: constituentId ? new Set([constituentId]) : new Set(),
+            memberIds: memberIdsFromSearch.length
+              ? new Set(memberIdsFromSearch)
+              : constituentId
+                ? new Set([constituentId])
+                : new Set(),
             householdType: search.resultType,
+            hasSearchMemberIds: memberIdsFromSearch.length > 0,
           });
         }
       } catch (error) {
@@ -272,37 +294,82 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
 
     if (realHouseholdEntries.length) {
       debug.steps.push('fetch-households');
+      debug.householdFetch = { statusCounts: {}, sampleFailures: [] };
 
+      const householdsNeedingFetch = realHouseholdEntries.filter(([, value]) => !value.hasSearchMemberIds);
+      const householdFetchQueue = [...householdsNeedingFetch];
       let fetchSuccess = 0;
+      let fetchAttempted = 0;
+      let fetchFailed = 0;
+      const firstIds: number[] = [];
 
-      await Promise.all(
-        realHouseholdEntries.map(async ([householdKey, value]) => {
-          const fetched = await fetchHouseholdDetails(value.householdId as number, apiKey);
-          if (!fetched.ok) {
-            return;
+      const processFetchQueue = async () => {
+        const next = householdFetchQueue.shift();
+        if (!next) return;
+
+        const [householdKey, value] = next;
+        const householdId = value.householdId as number;
+
+        if (firstIds.length < 3) {
+          firstIds.push(householdId);
+        }
+
+        fetchAttempted += 1;
+
+        const fetched = await fetchHouseholdDetailsWithRetry(householdId, apiKey, debug.householdFetch!);
+
+        if (!fetched.ok) {
+          fetchFailed += 1;
+          const fallbackMemberId = value.memberIds.size ? Array.from(value.memberIds)[0] : null;
+
+          if (fallbackMemberId && !value.members.has(fallbackMemberId)) {
+            value.members.set(fallbackMemberId, {
+              displayName: `Constituent ${fallbackMemberId}`,
+              householdKey,
+              source: 'fallback-no-household-fetch',
+            });
           }
 
-          fetchSuccess += 1;
+          return;
+        }
 
-          const memberIds = fetched.memberIds.length ? fetched.memberIds : Array.from(value.memberIds);
-          const updatedSnapshot = buildHouseholdSnapshotFromHousehold(fetched.household, value.householdId);
+        fetchSuccess += 1;
 
-          value.memberIds = new Set(memberIds);
-          value.snapshot = { ...value.snapshot, ...updatedSnapshot };
+        const memberIds = fetched.memberIds.length ? fetched.memberIds : Array.from(value.memberIds);
+        const updatedSnapshot = buildHouseholdSnapshotFromHousehold(fetched.household, value.householdId);
 
-          fetched.members.forEach((member) => {
-            if (member.constituentId) {
-              value.members.set(
-                member.constituentId,
-                buildMemberSnapshot(member.raw, householdKey)
-              );
-              value.memberIds.add(member.constituentId);
-            }
-          });
-        })
-      );
+        value.memberIds = new Set(memberIds);
+        value.snapshot = { ...value.snapshot, ...updatedSnapshot };
+
+        fetched.members.forEach((member) => {
+          if (member.constituentId) {
+            value.members.set(
+              member.constituentId,
+              buildMemberSnapshot(member.raw, householdKey)
+            );
+            value.memberIds.add(member.constituentId);
+          }
+        });
+      };
+
+      const fetchConcurrency = Math.min(3, householdsNeedingFetch.length || 1);
+      const fetchExecutors: Promise<void>[] = [];
+      for (let i = 0; i < fetchConcurrency; i += 1) {
+        fetchExecutors.push((async () => {
+          while (householdFetchQueue.length) {
+            await processFetchQueue();
+          }
+        })());
+      }
+
+      await Promise.all(fetchExecutors);
 
       debug.counts.householdFetchSuccess = fetchSuccess;
+      debug.counts.householdFetchAttempted = fetchAttempted;
+      debug.counts.householdFetchFailed = fetchFailed;
+      if (firstIds.length) {
+        debug.sample.fetchedHouseholdIds = firstIds;
+      }
     }
 
     debug.steps.push('build-households');
@@ -509,7 +576,7 @@ async function fetchHouseholdDetails(householdId: number, apiKey: string) {
   const result = await fetchJsonWithModes(url, apiKey);
 
   if (!result.ok) {
-    return { ok: false as const };
+    return { ok: false as const, status: result.status, bodySnippet: result.bodyPreview, url: result.url };
   }
 
   const household = (result.data ?? {}) as Record<string, unknown>;
@@ -543,7 +610,56 @@ async function fetchHouseholdDetails(householdId: number, apiKey: string) {
     });
   }
 
-  return { ok: true as const, household, memberIds, members };
+  return { ok: true as const, household, memberIds, members, status: result.status, url: result.url };
+}
+
+async function fetchHouseholdDetailsWithRetry(
+  householdId: number,
+  apiKey: string,
+  debugFetch: { statusCounts: Record<string, number>; sampleFailures: { householdId: number; url: string; status?: number; bodySnippet?: string }[] }
+) {
+  const maxAttempts = 3;
+  let delayMs = 500;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const response = await fetchHouseholdDetails(householdId, apiKey);
+
+    const statusKey = response.status ? String(response.status) : 'unknown';
+    debugFetch.statusCounts[statusKey] = (debugFetch.statusCounts[statusKey] ?? 0) + 1;
+
+    if (response.ok) {
+      return response;
+    }
+
+    if (debugFetch.sampleFailures.length < 3) {
+      debugFetch.sampleFailures.push({
+        householdId,
+        url: response.url ?? '',
+        status: response.status,
+        bodySnippet: response.bodySnippet,
+      });
+    }
+
+    if (response.status === 429 && attempt < maxAttempts) {
+      await sleep(delayMs);
+      delayMs *= 2;
+      continue;
+    }
+
+    if ((response.status === 401 || response.status === 403) && attempt < maxAttempts) {
+      await sleep(delayMs);
+      delayMs *= 2;
+      continue;
+    }
+
+    return response;
+  }
+
+  return { ok: false as const, status: undefined, url: `https://api.bloomerang.co/v2/households/${householdId}` };
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function buildHouseholdSnapshotFromHousehold(household: Record<string, unknown>, householdId: number | null) {
