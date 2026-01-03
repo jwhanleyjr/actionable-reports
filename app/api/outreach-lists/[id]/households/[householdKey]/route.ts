@@ -338,27 +338,36 @@ async function buildMemberWithStats(constituentId: number, apiKey: string, profi
   }
 
   const transactionsResult = await fetchTransactionsForConstituent(constituentId, apiKey);
-  const activeTasksResult = await getActiveTasksForConstituent(constituentId, apiKey);
 
-  const summarized = summarizeTransactions(transactionsResult.transactions ?? []);
+  let activeTasksResult: Awaited<ReturnType<typeof getActiveTasksForConstituent>> | null = null;
+  let activeTasksError: string | undefined;
+
+  try {
+    activeTasksResult = await getActiveTasksForConstituent(constituentId);
+  } catch (error) {
+    activeTasksError = error instanceof Error ? error.message : 'Unable to load tasks.';
+  }
+
+  const transactions = transactionsResult.ok ? transactionsResult.transactions : [];
+  const summarized = summarizeTransactions(transactions);
 
   const member: MemberWithStats & { transactions?: Transaction[] } = {
     constituent,
     constituentId,
     stats: summarized.stats,
-    statsDebug: summarized.debug,
+    statsDebug: { ...summarized.debug, requestUrls },
     requestUrls,
     profileUrl: constituentUrl.toString(),
-    transactions: transactionsResult.transactions,
+    transactions,
   };
 
   if (!transactionsResult.ok) {
     member.statsError = transactionsResult.error ?? 'Unable to load transactions.';
   }
 
-  if (!activeTasksResult.ok) {
-    member.tasksError = activeTasksResult.error ?? 'Unable to load tasks.';
-  } else {
+  if (activeTasksError) {
+    member.tasksError = activeTasksError;
+  } else if (activeTasksResult) {
     member.tasks = {
       active: activeTasksResult.tasks,
       loadedAt: new Date().toISOString(),
