@@ -24,8 +24,10 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       membersPrepared?: number;
       searchHouseholdType?: number;
       realHouseholds?: number;
+      soloHouseholds?: number;
       householdFetchSuccess?: number;
       avgMembersPerHousehold?: number;
+      membersInserted?: number;
     };
     sample: {
       firstAccountNumber?: string;
@@ -88,6 +90,32 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
 
     const result: EnhanceResult = { enhancedHouseholds: 0, enhancedMembers: 0, notFound: [], errors: [] };
 
+    const accountNumberMap = new Map<
+      string,
+      { constituentId: number; raw: Record<string, unknown> | null }
+    >();
+
+    const { data: mappedAccounts, error: mappedError } = await supabase
+      .from('account_number_map')
+      .select('account_number, constituent_id, raw')
+      .in(
+        'account_number',
+        importRows.map((row) => row.account_number)
+      );
+
+    if (mappedError) {
+      return NextResponse.json({ ok: false, error: mappedError.message, debug }, { status: 500 });
+    }
+
+    (mappedAccounts ?? []).forEach((row) => {
+      if (row.constituent_id) {
+        accountNumberMap.set(row.account_number, {
+          constituentId: row.constituent_id,
+          raw: (row.raw as Record<string, unknown> | null) ?? null,
+        });
+      }
+    });
+
     // Clear previous enhanced rows to keep the operation idempotent and avoid constraint collisions.
     const { error: deleteMembersError } = await supabase
       .from('outreach_list_members')
@@ -131,8 +159,14 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       if (!next) return;
 
       try {
-        const search = await searchConstituent(next.account_number, apiKey);
-        debug.counts.searched = (debug.counts.searched ?? 0) + 1;
+        const cached = accountNumberMap.get(next.account_number);
+        const parsedCached = cached?.raw ? parseCandidate(cached.raw) : null;
+
+        const search = parsedCached?.ok ? parsedCached : await searchConstituent(next.account_number, apiKey);
+
+        if (!parsedCached?.ok) {
+          debug.counts.searched = (debug.counts.searched ?? 0) + 1;
+        }
 
         if (search.resultType === 'Household') {
           debug.counts.searchHouseholdType = (debug.counts.searchHouseholdType ?? 0) + 1;
@@ -180,16 +214,18 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
           result_type: search.resultType,
         });
 
-        const { error: mapError } = await supabase.from('account_number_map').upsert({
-          account_number: next.account_number,
-          constituent_id: constituentId ?? resolvedHouseholdId ?? 0,
-          raw: search.constituent,
-          match_confidence: 'exact',
-        });
+        if (constituentId) {
+          const { error: mapError } = await supabase.from('account_number_map').upsert({
+            account_number: next.account_number,
+            constituent_id: constituentId,
+            raw: search.constituent,
+            match_confidence: 'exact',
+          });
 
-        if (mapError) {
-          result.errors.push(mapError.message);
-          return;
+          if (mapError) {
+            result.errors.push(mapError.message);
+            return;
+          }
         }
 
         const existing = households.get(householdKey);
@@ -226,6 +262,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
 
     const realHouseholdEntries = Array.from(households.entries()).filter(([, value]) => value.householdId !== null);
     debug.counts.realHouseholds = realHouseholdEntries.length;
+    debug.counts.soloHouseholds = households.size - realHouseholdEntries.length;
 
     if (realHouseholdEntries.length) {
       debug.steps.push('fetch-households');
@@ -270,8 +307,8 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       return NextResponse.json({ ok: true, ...result, debug });
     }
 
-    const householdRows = Array.from(households.entries()).map(([householdKey, data]) => {
-      const household_key = data.householdId != null ? `h:${data.householdId}` : householdKey;
+    const householdRows = Array.from(households.entries()).map(([_, data]) => {
+      const household_key = data.householdId != null ? `h:${data.householdId}` : `c:${data.soloConstituentId}`;
 
       return {
         outreach_list_id: id,
@@ -366,6 +403,8 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       result.errors.push(memberUpsertError.message);
     }
 
+    debug.counts.membersInserted = memberRows.length;
+
     result.enhancedHouseholds = households.size;
     result.enhancedMembers = memberRows.length;
     debug.steps.push('done');
@@ -404,6 +443,10 @@ async function searchConstituent(accountNumber: string, apiKey: string) {
     return { ok: false as const };
   }
 
+  return parseCandidate(candidate as Record<string, unknown>);
+}
+
+function parseCandidate(candidate: Record<string, unknown>) {
   const resultType = pickString(candidate as Record<string, unknown>, ['Type', 'type']);
   const idValue = pickNumber(candidate as Record<string, unknown>, [
     'id',
@@ -418,9 +461,13 @@ async function searchConstituent(accountNumber: string, apiKey: string) {
     : pickNumber(candidate as Record<string, unknown>, ['HouseholdId', 'householdId']);
   const constituentId = resultType === 'Household' ? null : idValue;
 
+  if (!idValue && resultType !== 'Household') {
+    return { ok: false as const };
+  }
+
   return {
     ok: true as const,
-    constituent: candidate as Record<string, unknown>,
+    constituent: candidate,
     constituentId,
     householdId,
     resultType,
