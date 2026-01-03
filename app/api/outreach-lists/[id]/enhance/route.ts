@@ -22,6 +22,10 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       searched?: number;
       householdsPrepared?: number;
       membersPrepared?: number;
+      searchHouseholdType?: number;
+      realHouseholds?: number;
+      householdFetchSuccess?: number;
+      avgMembersPerHousehold?: number;
     };
     sample: {
       firstAccountNumber?: string;
@@ -114,6 +118,8 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         soloConstituentId: number | null;
         snapshot: Record<string, unknown>;
         members: Map<number, Record<string, unknown>>;
+        memberIds: Set<number>;
+        householdType?: string;
       }
     >();
     const memberAccountNumbers = new Map<number, string>();
@@ -128,38 +134,55 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         const search = await searchConstituent(next.account_number, apiKey);
         debug.counts.searched = (debug.counts.searched ?? 0) + 1;
 
-        if (!search.ok || !search.constituentId) {
+        if (search.resultType === 'Household') {
+          debug.counts.searchHouseholdType = (debug.counts.searchHouseholdType ?? 0) + 1;
+        }
+
+        if (!search.ok || (!search.constituentId && search.resultType !== 'Household')) {
           console.log('enhance:search-miss', { outreach_list_id: id, account_number: next.account_number });
           result.notFound.push(next.account_number);
           return;
         }
 
-        const rawHouseholdId = search.householdId;
-        const householdId = Number.isFinite(rawHouseholdId) && (rawHouseholdId as number) > 0
-          ? (rawHouseholdId as number)
-          : null;
-        const householdKey = householdId ? `h:${householdId}` : `c:${search.constituentId}`;
-        const householdSnapshot = buildHouseholdSnapshot(search.constituent, householdId);
-        const memberSnapshot = buildMemberSnapshot(search.constituent, householdKey);
-        memberAccountNumbers.set(search.constituentId, next.account_number);
+        const resolvedHouseholdId = search.resultType === 'Household'
+          ? search.householdId
+          : Number.isFinite(search.householdId) && (search.householdId as number) > 0
+            ? (search.householdId as number)
+            : null;
+
+        if (search.resultType === 'Household' && resolvedHouseholdId == null) {
+          console.log('enhance:search-miss-household', { outreach_list_id: id, account_number: next.account_number });
+          result.notFound.push(next.account_number);
+          return;
+        }
+
+        const constituentId = search.constituentId ?? null;
+        const householdKey = resolvedHouseholdId != null ? `h:${resolvedHouseholdId}` : `c:${constituentId}`;
+        const householdSnapshot = buildHouseholdSnapshot(search.constituent, resolvedHouseholdId);
+        const memberSnapshot = constituentId ? buildMemberSnapshot(search.constituent, householdKey) : null;
+
+        if (constituentId) {
+          memberAccountNumbers.set(constituentId, next.account_number);
+        }
 
         if (!debug.sample.firstConstituentId) {
-          debug.sample.firstConstituentId = search.constituentId;
-          debug.sample.firstHouseholdId = householdId ?? undefined;
+          debug.sample.firstConstituentId = constituentId ?? undefined;
+          debug.sample.firstHouseholdId = resolvedHouseholdId ?? undefined;
           debug.sample.firstKey = householdKey;
         }
 
         console.log('enhance:search-success', {
           outreach_list_id: id,
           account_number: next.account_number,
-          constituent_id: search.constituentId,
-          household_id: householdId,
+          constituent_id: constituentId,
+          household_id: resolvedHouseholdId,
           household_key: householdKey,
+          result_type: search.resultType,
         });
 
         const { error: mapError } = await supabase.from('account_number_map').upsert({
           account_number: next.account_number,
-          constituent_id: search.constituentId,
+          constituent_id: constituentId ?? resolvedHouseholdId ?? 0,
           raw: search.constituent,
           match_confidence: 'exact',
         });
@@ -171,13 +194,18 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
 
         const existing = households.get(householdKey);
         if (existing) {
-          existing.members.set(search.constituentId, memberSnapshot);
+          if (constituentId && memberSnapshot) {
+            existing.members.set(constituentId, memberSnapshot);
+            existing.memberIds.add(constituentId);
+          }
         } else {
           households.set(householdKey, {
-            householdId,
-            soloConstituentId: householdId ? null : search.constituentId,
+            householdId: resolvedHouseholdId,
+            soloConstituentId: resolvedHouseholdId ? null : constituentId,
             snapshot: householdSnapshot,
-            members: new Map([[search.constituentId, memberSnapshot]]),
+            members: constituentId && memberSnapshot ? new Map([[constituentId, memberSnapshot]]) : new Map(),
+            memberIds: constituentId ? new Set([constituentId]) : new Set(),
+            householdType: search.resultType,
           });
         }
       } catch (error) {
@@ -196,6 +224,44 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
 
     await Promise.all(executing);
 
+    const realHouseholdEntries = Array.from(households.entries()).filter(([, value]) => value.householdId !== null);
+    debug.counts.realHouseholds = realHouseholdEntries.length;
+
+    if (realHouseholdEntries.length) {
+      debug.steps.push('fetch-households');
+
+      let fetchSuccess = 0;
+
+      await Promise.all(
+        realHouseholdEntries.map(async ([householdKey, value]) => {
+          const fetched = await fetchHouseholdDetails(value.householdId as number, apiKey);
+          if (!fetched.ok) {
+            return;
+          }
+
+          fetchSuccess += 1;
+
+          const memberIds = fetched.memberIds.length ? fetched.memberIds : Array.from(value.memberIds);
+          const updatedSnapshot = buildHouseholdSnapshotFromHousehold(fetched.household, value.householdId);
+
+          value.memberIds = new Set(memberIds);
+          value.snapshot = { ...value.snapshot, ...updatedSnapshot };
+
+          fetched.members.forEach((member) => {
+            if (member.constituentId) {
+              value.members.set(
+                member.constituentId,
+                buildMemberSnapshot(member.raw, householdKey)
+              );
+              value.memberIds.add(member.constituentId);
+            }
+          });
+        })
+      );
+
+      debug.counts.householdFetchSuccess = fetchSuccess;
+    }
+
     debug.steps.push('build-households');
     debug.counts.householdsPrepared = households.size;
 
@@ -204,8 +270,8 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       return NextResponse.json({ ok: true, ...result, debug });
     }
 
-    const householdRows = Array.from(households.entries()).map(([_, data]) => {
-      const household_key = data.householdId != null ? `h:${data.householdId}` : `c:${data.soloConstituentId}`;
+    const householdRows = Array.from(households.entries()).map(([householdKey, data]) => {
+      const household_key = data.householdId != null ? `h:${data.householdId}` : householdKey;
 
       return {
         outreach_list_id: id,
@@ -245,8 +311,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
 
     debug.steps.push('upsert-members');
 
-    const memberRows = Array.from(households.entries()).flatMap(([_, data]) => {
-      const householdKey = data.householdId != null ? `h:${data.householdId}` : `c:${data.soloConstituentId}`;
+    const memberRows = Array.from(households.entries()).flatMap(([householdKey, data]) => {
       const outreachListHouseholdId = householdIdMap.get(householdKey);
 
       if (!outreachListHouseholdId) {
@@ -261,7 +326,14 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         }[];
       }
 
-      return Array.from(data.members.entries()).map(([constituentId, memberSnapshot]) => {
+      const memberIds = data.householdId !== null
+        ? (data.memberIds.size ? Array.from(data.memberIds) : Array.from(data.members.keys()))
+        : data.soloConstituentId
+          ? [data.soloConstituentId]
+          : [];
+
+      return memberIds.map((constituentId) => {
+        const memberSnapshot = data.members.get(constituentId) ?? buildMemberSnapshotFromId(constituentId, householdKey);
         const accountNumber = memberAccountNumbers.get(constituentId) ?? null;
         console.log('enhance:member-upsert', {
           outreach_list_id: id,
@@ -284,6 +356,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     });
 
     debug.counts.membersPrepared = memberRows.length;
+    debug.counts.avgMembersPerHousehold = households.size ? Number((memberRows.length / households.size).toFixed(2)) : 0;
 
     const { error: memberUpsertError } = await supabase
       .from('outreach_list_members')
@@ -331,8 +404,8 @@ async function searchConstituent(accountNumber: string, apiKey: string) {
     return { ok: false as const };
   }
 
-  const householdId = pickNumber(candidate as Record<string, unknown>, ['HouseholdId', 'householdId']);
-  const constituentId = pickNumber(candidate as Record<string, unknown>, [
+  const resultType = pickString(candidate as Record<string, unknown>, ['Type', 'type']);
+  const idValue = pickNumber(candidate as Record<string, unknown>, [
     'id',
     'Id',
     'constituentId',
@@ -340,12 +413,17 @@ async function searchConstituent(accountNumber: string, apiKey: string) {
     'accountId',
     'AccountId',
   ]);
+  const householdId = resultType === 'Household'
+    ? idValue
+    : pickNumber(candidate as Record<string, unknown>, ['HouseholdId', 'householdId']);
+  const constituentId = resultType === 'Household' ? null : idValue;
 
   return {
     ok: true as const,
     constituent: candidate as Record<string, unknown>,
     constituentId,
     householdId,
+    resultType,
     isInHousehold: normalizeBoolean((candidate as Record<string, unknown>).IsInHousehold),
   };
 }
@@ -370,5 +448,64 @@ function buildMemberSnapshot(constituent: Record<string, unknown>, householdKey:
     phone,
     householdKey,
     source: 'bloomerang-search',
+  };
+}
+
+async function fetchHouseholdDetails(householdId: number, apiKey: string) {
+  const url = new URL(`https://api.bloomerang.co/v2/households/${householdId}`);
+  const result = await fetchJsonWithModes(url, apiKey);
+
+  if (!result.ok) {
+    return { ok: false as const };
+  }
+
+  const household = (result.data ?? {}) as Record<string, unknown>;
+  const memberIds: number[] = [];
+  const members: { constituentId: number | null; raw: Record<string, unknown> }[] = [];
+
+  if (Array.isArray((household as { MemberIds?: unknown[] }).MemberIds)) {
+    (household as { MemberIds: unknown[] }).MemberIds.forEach((id) => {
+      if (Number.isFinite(id)) {
+        memberIds.push(Number(id));
+      }
+    });
+  }
+
+  if (Array.isArray((household as { Members?: unknown[] }).Members)) {
+    (household as { Members: unknown[] }).Members.forEach((member) => {
+      if (member && typeof member === 'object') {
+        const constituentId = pickNumber(member as Record<string, unknown>, [
+          'Id',
+          'id',
+          'ConstituentId',
+          'constituentId',
+        ]);
+
+        if (constituentId) {
+          memberIds.push(constituentId);
+        }
+
+        members.push({ constituentId: constituentId ?? null, raw: member as Record<string, unknown> });
+      }
+    });
+  }
+
+  return { ok: true as const, household, memberIds, members };
+}
+
+function buildHouseholdSnapshotFromHousehold(household: Record<string, unknown>, householdId: number | null) {
+  const primaryName = pickString(household, ['Name', 'name', 'HouseholdName', 'householdName']);
+  return {
+    householdId,
+    displayName: primaryName || 'Household',
+    source: 'bloomerang-household',
+  };
+}
+
+function buildMemberSnapshotFromId(constituentId: number, householdKey: string) {
+  return {
+    displayName: `Constituent ${constituentId}`,
+    householdKey,
+    source: 'inferred-household-member',
   };
 }
