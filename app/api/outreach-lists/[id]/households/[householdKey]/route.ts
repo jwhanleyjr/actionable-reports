@@ -383,7 +383,8 @@ async function buildMemberWithStats(constituentId: number, apiKey: string, profi
 }
 
 async function fetchHouseholdDetails(householdId: number, apiKey: string) {
-  const url = new URL(`https://api.bloomerang.co/v2/households/${householdId}`);
+  // Household details must be fetched from the singular household endpoint, not /households.
+  const url = new URL(`https://api.bloomerang.co/v2/household/${householdId}`);
   const response = await fetchJsonWithModes(url, apiKey);
 
   if (!response.ok) {
