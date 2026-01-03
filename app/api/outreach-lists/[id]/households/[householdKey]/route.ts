@@ -103,6 +103,13 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
     return NextResponse.json({ ok: false, error: 'Unable to resolve household key.' }, { status: 400 });
   }
 
+  logDebug('householdFocus:start', {
+    outreachListId: id,
+    householdKey,
+    householdId,
+    soloConstituentId,
+  });
+
   const { data: householdRecord } = await supabase
     .from('outreach_list_households')
     .select('*')
@@ -129,6 +136,14 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
 
   let memberIds = (memberRows ?? []).map((row) => row.constituent_id).filter((idNum) => Number.isFinite(idNum));
 
+  logDebug('householdFocus:supabaseMembers', {
+    outreachListId: id,
+    householdKey,
+    outreachListHouseholdId,
+    memberIdCount: memberIds.length,
+    memberIds,
+  });
+
   if (!memberIds.length && Number.isFinite(soloConstituentId)) {
     memberIds = [soloConstituentId as number];
   }
@@ -144,14 +159,45 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
       householdPayload = householdResult.household;
       householdUrl = householdResult.url;
       memberIds = householdResult.memberIds;
+      logDebug('householdFocus:householdFetched', {
+        outreachListId: id,
+        householdKey,
+        householdId,
+        memberIdCount: memberIds.length,
+        memberIds,
+        householdUrl,
+      });
     } else {
       householdError = householdResult.bodySnippet ?? 'Unable to load household.';
       householdUrl = householdResult.url;
+      logDebug('householdFocus:householdFetchFailed', {
+        outreachListId: id,
+        householdKey,
+        householdId,
+        status: householdResult.status,
+        householdUrl,
+        error: householdError,
+      });
     }
   }
 
   const memberPromises = memberIds.map((memberId) => buildMemberWithStats(memberId, apiKey, null));
   const members = await Promise.all(memberPromises);
+
+  logDebug('householdFocus:memberBuildComplete', {
+    outreachListId: id,
+    householdKey,
+    memberCount: members.length,
+    memberIds,
+    errors: members
+      .filter((member) => member.constituentError || member.statsError || member.tasksError)
+      .map((member) => ({
+        constituentId: member.constituentId,
+        constituentError: member.constituentError,
+        statsError: member.statsError,
+        tasksError: member.tasksError,
+      })),
+  });
 
   const householdTotals = computeHouseholdTotals(members);
   const householdTransactions = members.flatMap((member) => member.transactions ?? []);
@@ -165,6 +211,13 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
       outreachListId: id,
       outreachListHouseholdId,
       householdKey,
+    });
+
+    logDebug('householdFocus:memberSnapshotsSaved', {
+      outreachListId: id,
+      householdKey,
+      outreachListHouseholdId,
+      memberCount: members.length,
     });
   }
 
@@ -197,6 +250,10 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
     members: membersForResponse,
     constituent: primaryConstituent,
   } satisfies CombinedSearchResult);
+}
+
+function logDebug(event: string, payload: Record<string, unknown>) {
+  console.info(`[outreach-household-focus] ${event}`, payload);
 }
 
 async function persistMemberSnapshots({
