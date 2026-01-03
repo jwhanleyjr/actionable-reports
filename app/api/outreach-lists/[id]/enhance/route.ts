@@ -557,8 +557,43 @@ function buildHouseholdSnapshot(constituent: Record<string, unknown>, householdI
   };
 }
 
+function computeMemberDisplayName(
+  constituent: Record<string, unknown> | null,
+  fallbackId?: number | null
+) {
+  if (!constituent) {
+    return fallbackId ? `Constituent ${fallbackId}` : 'Constituent';
+  }
+
+  const fullName = pickString(constituent, ['FullName', 'Name', 'name']);
+  if (fullName) {
+    return fullName;
+  }
+
+  const informalName = pickString(constituent, ['InformalName', 'informalName']);
+  if (informalName) {
+    return informalName;
+  }
+
+  const formalName = pickString(constituent, ['FormalName', 'formalName']);
+  if (formalName) {
+    return formalName;
+  }
+
+  const firstName = pickString(constituent, ['FirstName', 'firstName']);
+  const lastName = pickString(constituent, ['LastName', 'lastName']);
+  if (firstName && lastName) {
+    return `${firstName} ${lastName}`;
+  }
+
+  const id =
+    fallbackId ?? pickNumber(constituent, ['Id', 'id', 'ConstituentId', 'constituentId', 'AccountId', 'accountId']);
+
+  return id ? `Constituent ${id}` : 'Constituent';
+}
+
 function buildMemberSnapshot(constituent: Record<string, unknown>, householdKey: string) {
-  const displayName = pickString(constituent, ['FullName', 'Name', 'name']) || 'Constituent';
+  const displayName = computeMemberDisplayName(constituent);
   const email = pickString(constituent, ['Email', 'PrimaryEmail', 'email']);
   const phone = pickString(constituent, ['Phone', 'PrimaryPhone', 'phone']);
 
@@ -673,7 +708,7 @@ function buildHouseholdSnapshotFromHousehold(household: Record<string, unknown>,
 
 function buildMemberSnapshotFromId(constituentId: number, householdKey: string) {
   return {
-    displayName: `Constituent ${constituentId}`,
+    displayName: computeMemberDisplayName(null, constituentId),
     householdKey,
     source: 'inferred-household-member',
   };
