@@ -2,6 +2,8 @@
 
 import { useState } from 'react';
 
+import { getMemberActions } from '@/lib/memberActions';
+
 import styles from './OutreachListHouseholdRow.module.css';
 
 type HouseholdSnapshot = {
@@ -14,6 +16,7 @@ type MemberSnapshot = {
   email?: string;
   phone?: string;
   householdKey?: string;
+  restrictions?: unknown;
 };
 
 export type OutreachListMember = {
@@ -68,6 +71,31 @@ export function OutreachListHouseholdRow({ household, members }: Props) {
                 )}
                 <span>•</span>
                 <span>{member.member_snapshot?.phone || 'No phone'}</span>
+              </div>
+              {member.member_snapshot?.restrictions ? (
+                <div className={styles.restrictions}>Restrictions: {String(member.member_snapshot.restrictions)}</div>
+              ) : null}
+              <div className={styles.actions}>
+                {getMemberActions({ enableNote: true, enableTask: true }).map((action) => (
+                  <button
+                    key={action.key}
+                    type="button"
+                    className={styles.actionButton}
+                    title={action.label}
+                    onClick={() => {
+                      // Placeholder actions until full modals are wired up
+                      console.log(`action:${action.key}`, {
+                        constituentId: member.constituent_id,
+                        householdId: member.household_id,
+                        displayName: member.member_snapshot?.displayName,
+                      });
+                      alert(`${action.label} coming soon for ${member.member_snapshot?.displayName ?? member.constituent_id}`);
+                    }}
+                    disabled={!action.enabled}
+                  >
+                    <span className={styles.actionIcon}>{action.icon}</span>
+                  </button>
+                ))}
               </div>
             </div>
           ))}

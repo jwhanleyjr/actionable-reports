@@ -35,6 +35,11 @@
   margin-top: 8px;
 }
 
+.description {
+  margin-top: 10px;
+  color: #4b5563;
+}
+
 .pill {
   background: #dbeafe;
   color: #1d4ed8;

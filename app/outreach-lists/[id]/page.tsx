@@ -9,6 +9,7 @@ type OutreachListRecord = {
   name: string;
   goal: string | null;
   stage: string | null;
+  description?: string | null;
   created_at?: string;
   updated_at?: string;
 };
@@ -80,6 +81,7 @@ export default async function OutreachListDetailPage({ params }: { params: { id:
               {list.goal ? <span className={styles.pill}>{list.goal}</span> : null}
               {list.stage ? <span className={styles.pillMuted}>{list.stage}</span> : null}
             </div>
+            {list.description ? <p className={styles.description}>{list.description}</p> : null}
           </div>
           <form action={`/api/outreach-lists/${list.id}/enhance`} method="post">
             <button className={styles.primaryButton} type="submit">Enhance list</button>

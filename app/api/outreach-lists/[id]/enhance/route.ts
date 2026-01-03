@@ -1,7 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
 
-import { fetchJsonWithModes, getApiKey, normalizeBoolean, pickNumber, pickString } from '../../../bloomerang/utils';
+import { fetchJsonWithModes, getApiKey, normalizeBoolean, pickNumber, pickString, readValue } from '../../../bloomerang/utils';
 import { getSupabaseAdmin } from '../../../../../lib/supabaseAdmin';
 
 export const runtime = 'nodejs';
@@ -11,6 +11,33 @@ type EnhanceResult = {
   enhancedMembers: number;
   notFound: string[];
   errors: string[];
+};
+
+type HouseholdGroup = {
+  householdId: number | null;
+  soloConstituentId: number | null;
+  snapshot: Record<string, unknown>;
+  members: Map<number, Record<string, unknown>>;
+  memberIds: Set<number>;
+  householdType?: string;
+  hasSearchMemberIds?: boolean;
+  headId?: number | null;
+  householdPayload?: Record<string, unknown>;
+};
+
+type HydratedConstituent = {
+  id: number;
+  payload: Record<string, unknown>;
+  householdId: number | null;
+  displayName: string;
+  email?: string;
+  phone?: string;
+  restrictions?: unknown;
+};
+
+type ConstituentBatchResult = {
+  ok: boolean;
+  payloads: HydratedConstituent[];
 };
 
 export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
@@ -28,6 +55,11 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       householdFetchSuccess?: number;
       householdFetchAttempted?: number;
       householdFetchFailed?: number;
+      constituentHydrationAttempted?: number;
+      constituentHydrationSuccess?: number;
+      constituentHydrationFailed?: number;
+      membersHydrated?: number;
+      membersWithContact?: number;
       avgMembersPerHousehold?: number;
       membersInserted?: number;
     };
@@ -37,6 +69,8 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       firstHouseholdId?: number;
       firstKey?: string;
       fetchedHouseholdIds?: number[];
+      firstMemberEmail?: string;
+      firstMemberPhone?: string;
     };
     householdFetch?: {
       statusCounts: Record<string, number>;
@@ -123,42 +157,13 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       }
     });
 
-    // Clear previous enhanced rows to keep the operation idempotent and avoid constraint collisions.
-    const { error: deleteMembersError } = await supabase
-      .from('outreach_list_members')
-      .delete()
-      .eq('outreach_list_id', id);
-
-    if (deleteMembersError) {
-      return NextResponse.json({ ok: false, error: deleteMembersError.message, debug }, { status: 500 });
-    }
-
-    const { error: deleteHouseholdsError } = await supabase
-      .from('outreach_list_households')
-      .delete()
-      .eq('outreach_list_id', id);
-
-    if (deleteHouseholdsError) {
-      return NextResponse.json({ ok: false, error: deleteHouseholdsError.message, debug }, { status: 500 });
-    }
-
     const queue = [...importRows];
     debug.counts.mapped = queue.length;
 
     const executing: Promise<void>[] = [];
-    const households = new Map<
-      string,
-      {
-        householdId: number | null;
-        soloConstituentId: number | null;
-        snapshot: Record<string, unknown>;
-        members: Map<number, Record<string, unknown>>;
-        memberIds: Set<number>;
-        householdType?: string;
-        hasSearchMemberIds?: boolean;
-      }
-    >();
+    const households = new Map<string, HouseholdGroup>();
     const memberAccountNumbers = new Map<number, string>();
+    const constituentIdsToHydrate = new Set<number>();
 
     debug.steps.push('bloomerang-search');
 
@@ -216,6 +221,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
 
         if (constituentId) {
           memberAccountNumbers.set(constituentId, next.account_number);
+          constituentIdsToHydrate.add(constituentId);
         }
 
         if (!debug.sample.firstConstituentId) {
@@ -296,8 +302,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       debug.steps.push('fetch-households');
       debug.householdFetch = { statusCounts: {}, sampleFailures: [] };
 
-      const householdsNeedingFetch = realHouseholdEntries.filter(([, value]) => !value.hasSearchMemberIds);
-      const householdFetchQueue = [...householdsNeedingFetch];
+      const householdFetchQueue = [...realHouseholdEntries];
       let fetchSuccess = 0;
       let fetchAttempted = 0;
       let fetchFailed = 0;
@@ -340,6 +345,8 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
 
         value.memberIds = new Set(memberIds);
         value.snapshot = { ...value.snapshot, ...updatedSnapshot };
+        value.headId = pickNumber(fetched.household, ['HeadId', 'headId']);
+        value.householdPayload = fetched.household;
 
         fetched.members.forEach((member) => {
           if (member.constituentId) {
@@ -348,11 +355,12 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
               buildMemberSnapshot(member.raw, householdKey)
             );
             value.memberIds.add(member.constituentId);
+            constituentIdsToHydrate.add(member.constituentId);
           }
         });
       };
 
-      const fetchConcurrency = Math.min(3, householdsNeedingFetch.length || 1);
+      const fetchConcurrency = Math.min(5, households.size || 1);
       const fetchExecutors: Promise<void>[] = [];
       for (let i = 0; i < fetchConcurrency; i += 1) {
         fetchExecutors.push((async () => {
@@ -370,6 +378,22 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       if (firstIds.length) {
         debug.sample.fetchedHouseholdIds = firstIds;
       }
+
+      const householdCacheRows = realHouseholdEntries
+        .map(([, value]) => value)
+        .filter((value) => value.householdPayload)
+        .map((value) => ({
+          household_id: value.householdId as number,
+          payload: value.householdPayload,
+          display_name: pickString(value.householdPayload ?? {}, ['Name', 'FullName', 'HouseholdName']) ?? 'Household',
+          last_refreshed_at: new Date().toISOString(),
+        }));
+
+      if (householdCacheRows.length) {
+        await supabase
+          .from('households')
+          .upsert(householdCacheRows, { onConflict: 'household_id' });
+      }
     }
 
     debug.steps.push('build-households');
@@ -380,8 +404,68 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       return NextResponse.json({ ok: true, ...result, debug });
     }
 
+    // Determine all member constituent ids to hydrate
+    const allMemberIds = new Set<number>();
+    households.forEach((group) => {
+      if (group.householdId !== null) {
+        group.memberIds.forEach((memberId) => allMemberIds.add(memberId));
+      } else if (group.soloConstituentId) {
+        allMemberIds.add(group.soloConstituentId);
+      }
+    });
+
+    debug.counts.membersHydrated = allMemberIds.size;
+
+    const hydratedMembers = await hydrateConstituents(Array.from(allMemberIds), apiKey, debug);
+    const hydratedMap = new Map<number, HydratedConstituent>();
+    hydratedMembers.payloads.forEach((payload) => {
+      hydratedMap.set(payload.id, payload);
+    });
+
+    if (hydratedMembers.ok) {
+      debug.counts.constituentHydrationSuccess = hydratedMembers.payloads.length;
+    } else {
+      debug.counts.constituentHydrationFailed = (debug.counts.constituentHydrationAttempted ?? 0) - (debug.counts.constituentHydrationSuccess ?? 0);
+    }
+
+    // Cache hydrated constituents
+    if (hydratedMembers.payloads.length) {
+      const constituentRows = hydratedMembers.payloads.map((item) => ({
+        account_id: item.id,
+        household_id: item.householdId,
+        payload: item.payload,
+        display_name: item.displayName,
+        last_refreshed_at: new Date().toISOString(),
+      }));
+
+      await supabase.from('constituents').upsert(constituentRows, { onConflict: 'account_id' });
+    }
+
+    // Update member snapshots with hydrated data
+    households.forEach((group, householdKey) => {
+      const memberIds = group.householdId !== null
+        ? (group.memberIds.size ? Array.from(group.memberIds) : Array.from(group.members.keys()))
+        : group.soloConstituentId
+          ? [group.soloConstituentId]
+          : [];
+
+      memberIds.forEach((memberId) => {
+        const hydrated = hydratedMap.get(memberId);
+        if (hydrated) {
+          const snapshot = buildMemberSnapshotFromPayload(hydrated, householdKey, group.headId ?? null);
+          group.members.set(memberId, snapshot);
+        } else if (!group.members.has(memberId)) {
+          group.members.set(memberId, buildMemberSnapshotFromId(memberId, householdKey));
+        }
+      });
+    });
+
+    const nowIso = new Date().toISOString();
+
     const householdRows = Array.from(households.entries()).map(([_, data]) => {
       const household_key = data.householdId != null ? `h:${data.householdId}` : `c:${data.soloConstituentId}`;
+      const memberCount = data.memberIds.size || data.members.size;
+      const displayName = data.snapshot?.displayName || (data.householdPayload ? pickString(data.householdPayload, ['Name', 'FullName', 'HouseholdName']) : undefined);
 
       return {
         outreach_list_id: id,
@@ -389,7 +473,13 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         household_id: data.householdId ?? null,
         solo_constituent_id: data.soloConstituentId ?? null,
         origin: 'import',
-        household_snapshot: data.snapshot,
+        household_snapshot: {
+          ...data.snapshot,
+          headId: data.headId ?? undefined,
+          memberCount,
+          displayName: displayName || data.snapshot?.displayName || 'Household',
+          lastRefreshedAt: nowIso,
+        },
       };
     });
 
@@ -397,27 +487,56 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
 
     const householdIdMap = new Map<string, string>();
 
-    const { data: upserts, error } = await supabase
-      .from('outreach_list_households')
-      .upsert(householdRows, { onConflict: 'outreach_list_id,household_key' })
-      .select('id, household_key, household_id, solo_constituent_id');
+    const realRows = householdRows.filter((row) => row.household_id !== null);
+    const soloRows = householdRows.filter((row) => row.household_id === null);
 
-    if (error) {
-      result.errors.push(error.message);
-      return NextResponse.json({ ok: false, ...result, debug }, { status: 500 });
+    if (realRows.length) {
+      const { data: upserts, error } = await supabase
+        .from('outreach_list_households')
+        .upsert(realRows, { onConflict: 'outreach_list_id,household_id' })
+        .select('id, household_key, household_id, solo_constituent_id');
+
+      if (error) {
+        result.errors.push(error.message);
+        return NextResponse.json({ ok: false, ...result, debug }, { status: 500 });
+      }
+
+      (upserts ?? []).forEach((row) => {
+        householdIdMap.set(row.household_key, row.id);
+        console.log('enhance:household-upsert', {
+          outreach_list_id: id,
+          household_key: row.household_key,
+          household_id: row.household_id,
+          solo_constituent_id: row.solo_constituent_id,
+          list_household_id: row.id,
+          upsert_path: 'households-real',
+        });
+      });
     }
 
-    (upserts ?? []).forEach((row) => {
-      householdIdMap.set(row.household_key, row.id);
-      console.log('enhance:household-upsert', {
-        outreach_list_id: id,
-        household_key: row.household_key,
-        household_id: row.household_id,
-        solo_constituent_id: row.solo_constituent_id,
-        list_household_id: row.id,
-        upsert_path: 'households-batch',
+    if (soloRows.length) {
+      const { data: upserts, error } = await supabase
+        .from('outreach_list_households')
+        .upsert(soloRows, { onConflict: 'outreach_list_id,household_key' })
+        .select('id, household_key, household_id, solo_constituent_id');
+
+      if (error) {
+        result.errors.push(error.message);
+        return NextResponse.json({ ok: false, ...result, debug }, { status: 500 });
+      }
+
+      (upserts ?? []).forEach((row) => {
+        householdIdMap.set(row.household_key, row.id);
+        console.log('enhance:household-upsert', {
+          outreach_list_id: id,
+          household_key: row.household_key,
+          household_id: row.household_id,
+          solo_constituent_id: row.solo_constituent_id,
+          list_household_id: row.id,
+          upsert_path: 'households-solo',
+        });
       });
-    });
+    }
 
     debug.steps.push('upsert-members');
 
@@ -445,6 +564,21 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       return memberIds.map((constituentId) => {
         const memberSnapshot = data.members.get(constituentId) ?? buildMemberSnapshotFromId(constituentId, householdKey);
         const accountNumber = memberAccountNumbers.get(constituentId) ?? null;
+        const email = typeof memberSnapshot.email === 'string' ? memberSnapshot.email : undefined;
+        const phone = typeof memberSnapshot.phone === 'string' ? memberSnapshot.phone : undefined;
+
+        if (!debug.sample.firstMemberEmail && email) {
+          debug.sample.firstMemberEmail = email;
+        }
+
+        if (!debug.sample.firstMemberPhone && phone) {
+          debug.sample.firstMemberPhone = phone;
+        }
+
+        if (email || phone) {
+          debug.counts.membersWithContact = (debug.counts.membersWithContact ?? 0) + 1;
+        }
+
         console.log('enhance:member-upsert', {
           outreach_list_id: id,
           outreach_list_household_id: outreachListHouseholdId,
@@ -664,10 +798,14 @@ function sleep(ms: number) {
 
 function buildHouseholdSnapshotFromHousehold(household: Record<string, unknown>, householdId: number | null) {
   const primaryName = pickString(household, ['Name', 'name', 'HouseholdName', 'householdName']);
+  const memberIds = Array.isArray((household as { MemberIds?: unknown[] }).MemberIds)
+    ? (household as { MemberIds: unknown[] }).MemberIds.filter((id) => Number.isFinite(id)).map((id) => Number(id))
+    : [];
   return {
     householdId,
     displayName: primaryName || 'Household',
     source: 'bloomerang-household',
+    memberCount: memberIds.length || undefined,
   };
 }
 
@@ -677,4 +815,75 @@ function buildMemberSnapshotFromId(constituentId: number, householdKey: string) 
     householdKey,
     source: 'inferred-household-member',
   };
+}
+
+function buildMemberSnapshotFromPayload(constituent: HydratedConstituent, householdKey: string, headId: number | null) {
+  return {
+    constituentId: constituent.id,
+    displayName: constituent.displayName,
+    email: constituent.email,
+    phone: constituent.phone,
+    householdId: constituent.householdId,
+    restrictions: constituent.restrictions,
+    householdKey,
+    headOfHousehold: headId != null && headId === constituent.id,
+    source: 'constituent-cache',
+  };
+}
+
+async function hydrateConstituents(ids: number[], apiKey: string, debug: { counts: Record<string, number> }): Promise<ConstituentBatchResult> {
+  const chunks = chunk(ids, 25);
+  const payloads: HydratedConstituent[] = [];
+  let ok = true;
+
+  for (const chunkIds of chunks) {
+    debug.counts.constituentHydrationAttempted = (debug.counts.constituentHydrationAttempted ?? 0) + chunkIds.length;
+    const url = new URL('https://api.bloomerang.co/v2/constituents');
+    url.searchParams.set('id', chunkIds.join('|'));
+
+    const response = await fetchJsonWithModes(url, apiKey);
+
+    if (!response.ok) {
+      ok = false;
+      continue;
+    }
+
+    const data = Array.isArray(response.data)
+      ? response.data
+      : Array.isArray((response.data as { Results?: unknown[] })?.Results)
+        ? (response.data as { Results: unknown[] }).Results
+        : [];
+
+    data.forEach((raw) => {
+      if (!raw || typeof raw !== 'object') return;
+      const constituentId = pickNumber(raw as Record<string, unknown>, ['Id', 'id', 'AccountId', 'accountId', 'ConstituentId']);
+      if (!constituentId) return;
+
+      const displayName = pickString(raw as Record<string, unknown>, ['FullName', 'Name', 'InformalName', 'Informal']) || `Constituent ${constituentId}`;
+      const email = pickString(raw as Record<string, unknown>, ['PrimaryEmail.Value', 'PrimaryEmail', 'Email', 'Email.Value']);
+      const phone = pickString(raw as Record<string, unknown>, ['PrimaryPhone.Number', 'PrimaryPhone', 'Phone', 'Phone.Number']);
+      const householdId = pickNumber(raw as Record<string, unknown>, ['HouseholdId', 'householdId']);
+      const restrictions = (raw as Record<string, unknown>).CommunicationRestrictions ?? readValue(raw as Record<string, unknown>, 'CommunicationRestrictions');
+
+      payloads.push({
+        id: constituentId,
+        payload: raw as Record<string, unknown>,
+        householdId: householdId ?? null,
+        displayName,
+        email: email ?? undefined,
+        phone: phone ?? undefined,
+        restrictions: restrictions ?? undefined,
+      });
+    });
+  }
+
+  return { ok, payloads };
+}
+
+function chunk<T>(items: T[], size: number): T[][] {
+  const result: T[][] = [];
+  for (let i = 0; i < items.length; i += size) {
+    result.push(items.slice(i, i + size));
+  }
+  return result;
 }

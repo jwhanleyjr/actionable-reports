@@ -58,3 +58,43 @@
   font-size: 14px;
   margin-top: 4px;
 }
+
+.restrictions {
+  margin-top: 6px;
+  color: #9ca3af;
+  font-size: 13px;
+}
+
+.actions {
+  margin-top: 10px;
+  display: flex;
+  gap: 6px;
+}
+
+.actionButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #fff;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.actionButton:hover {
+  background: #eef2ff;
+  border-color: #c7d2fe;
+}
+
+.actionButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.actionIcon {
+  display: inline-flex;
+  color: #4b5563;
+}
