@@ -311,6 +311,10 @@ function computeHouseholdTotals(members: (MemberWithStats & { transactions?: Tra
   });
 }
 
+// Bloomerang calls used for household-focus member enrichment:
+// - https://api.bloomerang.co/v2/constituent/{constituentId} (profile)
+// - https://api.bloomerang.co/v2/constituent/{constituentId}/transactions (giving history via fetchTransactionsForConstituent)
+// - https://api.bloomerang.co/v2/constituent/{constituentId}/tasks?status=Active (open tasks via getActiveTasksForConstituent)
 async function buildMemberWithStats(constituentId: number, apiKey: string, profile?: Record<string, unknown> | null) {
   const requestUrls: string[] = [];
   const existingProfile = profile ?? null;
