@@ -1,9 +1,10 @@
 .card {
   background: #fff;
   border: 1px solid #e5e7eb;
-  border-radius: 12px;
-  margin-bottom: 12px;
+  border-radius: 14px;
+  margin-bottom: 16px;
   overflow: hidden;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
 }
 
 .rowButton {
@@ -11,37 +12,94 @@
   justify-content: space-between;
   align-items: center;
   width: 100%;
-  padding: 16px;
+  padding: 18px 18px 14px;
   background: transparent;
   border: none;
   cursor: pointer;
   text-align: left;
 }
 
-.householdName {
-  font-weight: 700;
-  font-size: 18px;
+.householdHeader {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
-.meta {
-  color: #6b7280;
-  margin-top: 4px;
+.householdLabel {
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #94a3b8;
+  margin: 0;
+}
+
+.householdName {
+  font-weight: 800;
+  font-size: 20px;
+  color: #0f172a;
+}
+
+.pillRow {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 10px;
+  background: #e6f2fa;
+  color: #1e83b5;
+  font-weight: 700;
+  font-size: 13px;
+  border: 1px solid #dbeafe;
+}
+
+.pillMuted {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 10px;
+  background: #f8fafc;
+  color: #475569;
+  font-weight: 700;
+  font-size: 13px;
+  border: 1px solid #e2e8f0;
 }
 
 .chevron {
   font-size: 24px;
   color: #374151;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: #f8fafc;
 }
 
 .members {
   border-top: 1px solid #e5e7eb;
-  padding: 12px 16px 16px;
+  padding: 14px 18px 18px;
   display: grid;
-  gap: 10px;
+  gap: 12px;
+  background: linear-gradient(180deg, #f8fafc 0%, #ffffff 10%);
+}
+
+.memberListLabel {
+  font-weight: 700;
+  color: #1f2937;
+  margin-bottom: 2px;
 }
 
 .memberCard {
-  padding: 12px;
+  padding: 12px 14px;
   border: 1px solid #e5e7eb;
   border-radius: 10px;
   background: #ffffff;
@@ -57,6 +115,7 @@
 .memberName {
   font-weight: 800;
   color: #1f2937;
+  margin-bottom: 6px;
 }
 
 .memberMeta {
@@ -65,11 +124,10 @@
   flex-wrap: wrap;
   color: #1f2937;
   font-size: 14px;
-  margin-top: 6px;
 }
 
 .restrictions {
-  margin-top: 6px;
+  margin-top: 8px;
   color: #9ca3af;
   font-size: 13px;
 }
@@ -91,6 +149,7 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  border: 1px solid #dbeafe;
 }
 
 .metaPillMuted {
@@ -107,36 +166,4 @@
 
 .metaLink:hover {
   text-decoration: underline;
-}
-
-.actionButton {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 36px;
-  height: 36px;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  background: #fff;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.actionButtonGhost {
-  background: #f8fafc;
-}
-
-.actionButton:hover {
-  background: #eef2ff;
-  border-color: #c7d2fe;
-}
-
-.actionButton:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.actionIcon {
-  display: inline-flex;
-  color: #4b5563;
 }

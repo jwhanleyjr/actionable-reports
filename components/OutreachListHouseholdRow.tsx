@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 
+import { MemberActionIconButton } from '@/app/search/MemberActionIconButton';
 import { getMemberActions } from '@/lib/memberActions';
 
 import styles from './OutreachListHouseholdRow.module.css';
@@ -56,18 +57,34 @@ export function OutreachListHouseholdRow({ household, members, constituentDetail
     members[0]?.member_snapshot?.displayName ||
     (household.household_id ? `Household ${household.household_id}` : 'Household');
 
+  const pillSummary = household.household_id
+    ? `Household ID: ${household.household_id}`
+    : household.solo_constituent_id
+      ? `Solo: ${household.solo_constituent_id}`
+      : 'Imported household';
+
   return (
     <div className={styles.card}>
       <button className={styles.rowButton} type="button" onClick={() => setExpanded((prev) => !prev)}>
-        <div>
-          <div className={styles.householdName}>{title}</div>
-          <div className={styles.meta}>{members.length} member{members.length === 1 ? '' : 's'}</div>
+        <div className={styles.householdHeader}>
+          <div>
+            <p className={styles.householdLabel}>Household</p>
+            <div className={styles.householdName}>{title}</div>
+            <div className={styles.pillRow}>
+              <span className={styles.pill}>{pillSummary}</span>
+              <span className={styles.pillMuted}>
+                {members.length} member{members.length === 1 ? '' : 's'}
+              </span>
+            </div>
+          </div>
         </div>
+
         <div className={styles.chevron}>{expanded ? '−' : '+'}</div>
       </button>
 
       {expanded ? (
         <div className={styles.members}>
+          <div className={styles.memberListLabel}>Household Members</div>
           {members.map((member) => {
             const fallback = constituentDetails?.get(member.constituent_id);
             const displayName =
@@ -96,7 +113,8 @@ export function OutreachListHouseholdRow({ household, members, constituentDetail
                       )}
                       {email ? (
                         <span className={styles.metaPill}>
-                          Email: {emailLink ? (
+                          Email:{' '}
+                          {emailLink ? (
                             <a href={emailLink} className={styles.metaLink}>
                               {email}
                             </a>
@@ -112,13 +130,11 @@ export function OutreachListHouseholdRow({ household, members, constituentDetail
 
                   <div className={styles.memberActions}>
                     {memberActions.map((action) => (
-                      <button
+                      <MemberActionIconButton
                         key={action.key}
-                        type="button"
-                        className={`${styles.actionButton} ${styles.actionButtonGhost}`}
-                        title={action.label}
+                        action={action}
+                        ariaLabel={`${action.label} for ${displayName}`}
                         onClick={() => {
-                          // Placeholder actions until full modals are wired up
                           console.log(`action:${action.key}`, {
                             constituentId: member.constituent_id,
                             householdId: member.household_id,
@@ -126,11 +142,7 @@ export function OutreachListHouseholdRow({ household, members, constituentDetail
                           });
                           alert(`${action.label} coming soon for ${displayName ?? member.constituent_id}`);
                         }}
-                        disabled={!action.enabled}
-                        aria-label={`${action.label} for ${displayName}`}
-                      >
-                        <span className={styles.actionIcon}>{action.icon}</span>
-                      </button>
+                      />
                     ))}
                   </div>
                 </div>
