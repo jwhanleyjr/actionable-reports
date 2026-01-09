@@ -555,7 +555,6 @@ export function SearchWorkspace({
 
         <div className={styles.card}>
           <header className={styles.header}>
-            <p className={styles.kicker}>Household Workspace</p>
             <h1 className={styles.title}>
               {mode === 'householdFocus' ? 'Household Focus' : 'Bloomerang Search Tester'}
             </h1>
