@@ -15,6 +15,17 @@ type OutreachListCard = {
   notStarted: number;
 };
 
+type OutreachListRow = {
+  id: string;
+  name: string;
+  goal: string | null;
+  stage: string | null;
+};
+
+type OutreachListRowWithArchive = OutreachListRow & {
+  archived_at?: string | null;
+};
+
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
@@ -55,7 +66,7 @@ async function fetchLatestOutreachLists(): Promise<OutreachListCard[]> {
     .order('updated_at', { ascending: false })
     .limit(6);
 
-  let listRows = lists;
+  let listRows: OutreachListRow[] | OutreachListRowWithArchive[] | null = lists;
   if (error) {
     const { data: fallbackLists } = await supabase
       .from('outreach_lists')
