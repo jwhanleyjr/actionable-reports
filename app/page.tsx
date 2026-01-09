@@ -31,9 +31,9 @@ export const revalidate = 0;
 
 const actionCards = [
   {
-    title: 'Upload Excel',
-    description: 'Import a spreadsheet to build an outreach list from existing donor data.',
-    cta: 'Upload file',
+    title: 'Upload Bloomerang Report',
+    description: 'Import Bloomerang excel report to build and outreach list from existing donor data.',
+    cta: 'Upload report',
     href: '/outreach-lists/new/import',
     comingSoon: false,
   },
