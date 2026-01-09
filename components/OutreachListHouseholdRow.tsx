@@ -62,6 +62,7 @@ export function OutreachListHouseholdRow({ listId, household, members }: Props) 
     : statusValue === 'in_progress'
       ? 'In progress'
       : 'Not started';
+  const isComplete = statusValue === 'complete';
 
   const handleNavigate = () => {
     if (!householdKey) return;
@@ -73,8 +74,10 @@ export function OutreachListHouseholdRow({ listId, household, members }: Props) 
     <div className={styles.card}>
       <button className={styles.rowButton} type="button" onClick={handleNavigate}>
         <div>
-          <div className={styles.householdName}>{title}</div>
-          <div className={styles.meta}>{members.length} member{members.length === 1 ? '' : 's'}</div>
+          <div className={isComplete ? styles.householdNameCompleted : styles.householdName}>{title}</div>
+          <div className={isComplete ? styles.metaCompleted : styles.meta}>
+            {members.length} member{members.length === 1 ? '' : 's'}
+          </div>
           <span className={styles.statusPill}>{statusLabel}</span>
         </div>
         <div className={styles.chevron}>→</div>

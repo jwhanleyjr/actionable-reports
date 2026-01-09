@@ -23,9 +23,22 @@
   font-size: 18px;
 }
 
+.householdNameCompleted {
+  font-weight: 700;
+  font-size: 18px;
+  color: #9ca3af;
+  text-decoration: line-through;
+}
+
 .meta {
   color: #6b7280;
   margin-top: 4px;
+}
+
+.metaCompleted {
+  color: #9ca3af;
+  margin-top: 4px;
+  text-decoration: line-through;
 }
 
 .statusPill {

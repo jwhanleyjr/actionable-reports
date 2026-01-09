@@ -72,6 +72,16 @@ export default async function OutreachListDetailPage({ params }: { params: { id:
     existing.push(member);
     groupedMembers.set(key, existing);
   });
+  const sortedHouseholds = [...(households ?? [])].sort((left, right) => {
+    const leftComplete = left.outreach_status === 'complete';
+    const rightComplete = right.outreach_status === 'complete';
+
+    if (leftComplete === rightComplete) {
+      return 0;
+    }
+
+    return leftComplete ? 1 : -1;
+  });
 
   return (
     <main className={styles.page}>
@@ -99,7 +109,7 @@ export default async function OutreachListDetailPage({ params }: { params: { id:
           </div>
 
           <div className={styles.list}>
-            {(households ?? []).map((household) => (
+            {sortedHouseholds.map((household) => (
               <OutreachListHouseholdRow
                 key={household.id}
                 listId={list.id}
