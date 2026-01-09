@@ -22,6 +22,7 @@ type OutreachListHousehold = {
   completed_count?: number | null;
   in_progress_count?: number | null;
   not_started_count?: number | null;
+  outreach_status?: string | null;
 };
 
 export const dynamic = 'force-dynamic';

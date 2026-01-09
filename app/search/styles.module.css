@@ -180,6 +180,19 @@
   gap: 12px;
 }
 
+.contextStatusRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.statusControl {
+  display: grid;
+  gap: 4px;
+  min-width: 160px;
+}
+
 .contextTitle {
   margin: 0;
   font-size: 18px;

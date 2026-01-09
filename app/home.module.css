@@ -186,6 +186,24 @@
   font-size: 14px;
 }
 
+.progressBar {
+  height: 8px;
+  border-radius: 999px;
+  background: #e5e7eb;
+  overflow: hidden;
+  display: flex;
+}
+
+.progressComplete {
+  background: #16a34a;
+  height: 100%;
+}
+
+.progressInProgress {
+  background: #93c5fd;
+  height: 100%;
+}
+
 .emptyState {
   border: 1px dashed #cbd5e1;
   padding: 24px;

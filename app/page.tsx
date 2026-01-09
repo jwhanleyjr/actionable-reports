@@ -9,6 +9,9 @@ type OutreachListCard = {
   goal: string | null;
   stage: string | null;
   households: number;
+  completed: number;
+  inProgress: number;
+  notStarted: number;
 };
 
 export const dynamic = 'force-dynamic';
@@ -62,12 +65,33 @@ async function fetchLatestOutreachLists(): Promise<OutreachListCard[]> {
       .select('id', { count: 'exact', head: true })
       .eq('outreach_list_id', list.id);
 
+    const { data: households } = await supabase
+      .from('outreach_list_households')
+      .select('outreach_status')
+      .eq('outreach_list_id', list.id)
+      .returns<{ outreach_status?: string | null }[]>();
+
+    const progress = (households ?? []).reduce((acc, row) => {
+      const status = row.outreach_status ?? 'not_started';
+      if (status === 'complete') {
+        acc.completed += 1;
+      } else if (status === 'in_progress') {
+        acc.inProgress += 1;
+      } else {
+        acc.notStarted += 1;
+      }
+      return acc;
+    }, { completed: 0, inProgress: 0, notStarted: 0 });
+
     results.push({
       id: list.id,
       name: list.name,
       goal: list.goal,
       stage: list.stage,
       households: count ?? 0,
+      completed: progress.completed,
+      inProgress: progress.inProgress,
+      notStarted: progress.notStarted,
     });
   }
 
@@ -127,19 +151,33 @@ export default async function Home() {
 
           {outreachLists.length ? (
             <div className={styles.campaignGrid}>
-              {outreachLists.map((list) => (
-                <div key={list.id} className={styles.campaignCard}>
-                  <div className={styles.cardHeaderRow}>
-                    <h3 className={styles.cardTitle}>{list.name}</h3>
-                    <span className={styles.statusBadge}>{list.stage ?? 'Draft'}</span>
+              {outreachLists.map((list) => {
+                const totalProgress = list.households || (list.completed + list.inProgress + list.notStarted);
+                const completePercent = totalProgress ? (list.completed / totalProgress) * 100 : 0;
+                const inProgressPercent = totalProgress ? (list.inProgress / totalProgress) * 100 : 0;
+
+                return (
+                  <div key={list.id} className={styles.campaignCard}>
+                    <div className={styles.cardHeaderRow}>
+                      <h3 className={styles.cardTitle}>{list.name}</h3>
+                      <span className={styles.statusBadge}>{list.stage ?? 'Draft'}</span>
+                    </div>
+                    <p className={styles.cardDescription}>{list.goal ?? 'Goal not set'}</p>
+                    <p className={styles.metaText}>{list.households} households queued</p>
+                    <div
+                      className={styles.progressBar}
+                      role="img"
+                      aria-label={`Outreach progress: ${list.completed} complete, ${list.inProgress} in progress, ${list.notStarted} not started`}
+                    >
+                      <div className={styles.progressComplete} style={{ width: `${completePercent}%` }} />
+                      <div className={styles.progressInProgress} style={{ width: `${inProgressPercent}%` }} />
+                    </div>
+                    <Link className={styles.primaryButton} href={`/outreach-lists/${list.id}`}>
+                      View list
+                    </Link>
                   </div>
-                  <p className={styles.cardDescription}>{list.goal ?? 'Goal not set'}</p>
-                  <p className={styles.metaText}>{list.households} households queued</p>
-                  <Link className={styles.primaryButton} href={`/outreach-lists/${list.id}`}>
-                    View list
-                  </Link>
-                </div>
-              ))}
+                );
+              })}
             </div>
           ) : (
             <div className={styles.emptyState}>No outreach lists yet. Start by uploading an Excel file.</div>
