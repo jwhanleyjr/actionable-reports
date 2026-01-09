@@ -23,9 +23,35 @@
   font-size: 18px;
 }
 
+.householdNameCompleted {
+  font-weight: 700;
+  font-size: 18px;
+  color: #9ca3af;
+  text-decoration: line-through;
+}
+
 .meta {
   color: #6b7280;
   margin-top: 4px;
+}
+
+.metaCompleted {
+  color: #9ca3af;
+  margin-top: 4px;
+  text-decoration: line-through;
+}
+
+.statusPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #eef2ff;
+  color: #4338ca;
+  font-size: 12px;
+  font-weight: 600;
 }
 
 .chevron {

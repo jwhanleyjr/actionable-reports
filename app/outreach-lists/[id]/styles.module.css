@@ -17,6 +17,12 @@
   margin-bottom: 32px;
 }
 
+.headerActions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
 .kicker {
   letter-spacing: 0.1em;
   font-size: 12px;
@@ -59,6 +65,21 @@
   border: none;
   font-weight: 600;
   cursor: pointer;
+}
+
+.secondaryButton {
+  border: 1px solid #cbd5e1;
+  color: #0f172a;
+  background: #f8fafc;
+  border-radius: 10px;
+  padding: 12px 18px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.secondaryButton:hover {
+  background: #e5e7eb;
+  border-color: #94a3b8;
 }
 
 .section {

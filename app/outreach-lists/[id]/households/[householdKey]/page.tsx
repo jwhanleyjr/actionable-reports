@@ -36,6 +36,12 @@ export default async function HouseholdFocusPage({ params }: { params: { id: str
 
   const householdKey = decodeURIComponent(params.householdKey);
   const profileUrl = `/api/outreach-lists/${params.id}/households/${encodeURIComponent(householdKey)}`;
+  const { data: householdRecord } = await supabase
+    .from('outreach_list_households')
+    .select('outreach_status')
+    .eq('outreach_list_id', params.id)
+    .eq('household_key', householdKey)
+    .maybeSingle<{ outreach_status?: string | null }>();
 
   return (
     <SearchWorkspace
@@ -47,6 +53,8 @@ export default async function HouseholdFocusPage({ params }: { params: { id: str
         description: list.description ?? list.stage,
         breadcrumbHref: `/outreach-lists/${list.id}`,
         breadcrumbLabel: 'Back to outreach list',
+        householdStatus: householdRecord?.outreach_status ?? 'not_started',
+        statusEndpoint: `/api/outreach-lists/${list.id}/households/${encodeURIComponent(householdKey)}/status`,
       }}
     />
   );

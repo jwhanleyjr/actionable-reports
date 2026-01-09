@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
 import { OutreachListHouseholdRow, OutreachListMember } from '../../../components/OutreachListHouseholdRow';
@@ -19,6 +20,10 @@ type OutreachListHousehold = {
   household_id: number | null;
   solo_constituent_id?: number | null;
   household_snapshot: { displayName?: string };
+  completed_count?: number | null;
+  in_progress_count?: number | null;
+  not_started_count?: number | null;
+  outreach_status?: string | null;
 };
 
 export const dynamic = 'force-dynamic';
@@ -68,6 +73,16 @@ export default async function OutreachListDetailPage({ params }: { params: { id:
     existing.push(member);
     groupedMembers.set(key, existing);
   });
+  const sortedHouseholds = [...(households ?? [])].sort((left, right) => {
+    const leftComplete = left.outreach_status === 'complete';
+    const rightComplete = right.outreach_status === 'complete';
+
+    if (leftComplete === rightComplete) {
+      return 0;
+    }
+
+    return leftComplete ? 1 : -1;
+  });
 
   return (
     <main className={styles.page}>
@@ -81,9 +96,14 @@ export default async function OutreachListDetailPage({ params }: { params: { id:
               {list.stage ? <span className={styles.pillMuted}>{list.stage}</span> : null}
             </div>
           </div>
-          <form action={`/api/outreach-lists/${list.id}/enhance`} method="post">
-            <button className={styles.primaryButton} type="submit">Enhance list</button>
-          </form>
+          <div className={styles.headerActions}>
+            <Link className={styles.secondaryButton} href="/">
+              Back to Dashboard
+            </Link>
+            <form action={`/api/outreach-lists/${list.id}/enhance`} method="post">
+              <button className={styles.primaryButton} type="submit">Enhance list</button>
+            </form>
+          </div>
         </header>
 
         <section className={styles.section}>
@@ -95,7 +115,7 @@ export default async function OutreachListDetailPage({ params }: { params: { id:
           </div>
 
           <div className={styles.list}>
-            {(households ?? []).map((household) => (
+            {sortedHouseholds.map((household) => (
               <OutreachListHouseholdRow
                 key={household.id}
                 listId={list.id}

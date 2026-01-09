@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, useEffect, useState } from 'react';
+import { ChangeEvent, FormEvent, useEffect, useState } from 'react';
 
 import { getMemberActions, type MemberActionKey } from '../../lib/memberActions';
 import { MemberActionIconButton } from './MemberActionIconButton';
@@ -104,6 +104,8 @@ type SearchPageProps = {
     name?: string | null;
     breadcrumbHref?: string | null;
     breadcrumbLabel?: string | null;
+    householdStatus?: string | null;
+    statusEndpoint?: string | null;
   };
 };
 
@@ -136,6 +138,8 @@ export function SearchWorkspace({
   const [noteSubmitting, setNoteSubmitting] = useState(false);
   const [bccEmail, setBccEmail] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [outreachStatus, setOutreachStatus] = useState(outreachContext?.householdStatus ?? 'not_started');
+  const [statusSaving, setStatusSaving] = useState(false);
   const [recentlyLogged, setRecentlyLogged] = useState<{ memberId: number; action: MemberActionKey; ts: number } | null>(null);
   const [taskActionRequest, setTaskActionRequest] = useState<{ memberId: number; action: 'create'; ts: number } | null>(null);
 
@@ -324,6 +328,47 @@ export function SearchWorkspace({
     setTimeout(() => setToastMessage(null), 3000);
   };
 
+  useEffect(() => {
+    setOutreachStatus(outreachContext?.householdStatus ?? 'not_started');
+  }, [outreachContext?.householdStatus]);
+
+  const handleOutreachStatusChange = async (event: ChangeEvent<HTMLSelectElement>) => {
+    const nextStatus = event.target.value;
+    if (nextStatus === outreachStatus) {
+      return;
+    }
+
+    const previousStatus = outreachStatus;
+    setOutreachStatus(nextStatus);
+
+    if (!outreachContext?.statusEndpoint) {
+      return;
+    }
+
+    setStatusSaving(true);
+
+    try {
+      const response = await fetch(outreachContext.statusEndpoint, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: nextStatus }),
+      });
+      const payload = await response.json() as { ok?: boolean; error?: string };
+
+      if (!response.ok || !payload.ok) {
+        throw new Error(payload.error ?? 'Unable to update household status.');
+      }
+
+      showToast('Household status updated');
+    } catch (error) {
+      console.error('Failed to update household status', error);
+      setOutreachStatus(previousStatus);
+      showToast('Unable to update household status');
+    } finally {
+      setStatusSaving(false);
+    }
+  };
+
   const copyBccToClipboard = async () => {
     if (!bccEmail) {
       return;
@@ -501,19 +546,15 @@ export function SearchWorkspace({
       <div className={styles.shell}>
         <div className={styles.navbar}>
           <span className={styles.brand}>Bloomerang Calls</span>
-          <button type="button" className={styles.navButton}>
-            New Call Campaign
-          </button>
+          {outreachContext?.breadcrumbHref ? (
+            <a className={styles.navButton} href={outreachContext.breadcrumbHref}>
+              Back to Outreach List
+            </a>
+          ) : null}
         </div>
 
         <div className={styles.card}>
           <header className={styles.header}>
-            {outreachContext?.breadcrumbHref ? (
-              <a className={styles.breadcrumb} href={outreachContext.breadcrumbHref}>
-                {outreachContext.breadcrumbLabel ?? 'Back to outreach list'}
-              </a>
-            ) : null}
-            <p className={styles.kicker}>Campaign Workspace</p>
             <h1 className={styles.title}>
               {mode === 'householdFocus' ? 'Household Focus' : 'Bloomerang Search Tester'}
             </h1>
@@ -557,7 +598,25 @@ export function SearchWorkspace({
                   <p className={styles.kicker}>Outreach Context</p>
                   <h2 className={styles.contextTitle}>{outreachContext.name ?? 'Outreach List'}</h2>
                 </div>
-                {outreachContext.goal ? <span className={styles.pill}>{outreachContext.goal}</span> : null}
+                <div className={styles.contextStatusRow}>
+                  {outreachContext.goal ? <span className={styles.pill}>{outreachContext.goal}</span> : null}
+                  <div className={styles.statusControl}>
+                    <label className={styles.fieldLabel} htmlFor="householdStatus">
+                      Household status
+                    </label>
+                    <select
+                      id="householdStatus"
+                      className={styles.select}
+                      value={outreachStatus}
+                      onChange={handleOutreachStatusChange}
+                      disabled={statusSaving}
+                    >
+                      <option value="not_started">Not started</option>
+                      <option value="in_progress">In progress</option>
+                      <option value="complete">Complete</option>
+                    </select>
+                  </div>
+                </div>
               </div>
               {outreachContext.description ? (
                 <p className={styles.contextDescription}>{outreachContext.description}</p>
