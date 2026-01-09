@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
 import { OutreachListHouseholdRow, OutreachListMember } from '../../../components/OutreachListHouseholdRow';
@@ -95,9 +96,14 @@ export default async function OutreachListDetailPage({ params }: { params: { id:
               {list.stage ? <span className={styles.pillMuted}>{list.stage}</span> : null}
             </div>
           </div>
-          <form action={`/api/outreach-lists/${list.id}/enhance`} method="post">
-            <button className={styles.primaryButton} type="submit">Enhance list</button>
-          </form>
+          <div className={styles.headerActions}>
+            <Link className={styles.secondaryButton} href="/">
+              Back to Dashboard
+            </Link>
+            <form action={`/api/outreach-lists/${list.id}/enhance`} method="post">
+              <button className={styles.primaryButton} type="submit">Enhance list</button>
+            </form>
+          </div>
         </header>
 
         <section className={styles.section}>
