@@ -546,9 +546,11 @@ export function SearchWorkspace({
       <div className={styles.shell}>
         <div className={styles.navbar}>
           <span className={styles.brand}>Bloomerang Calls</span>
-          <button type="button" className={styles.navButton}>
-            New Call Campaign
-          </button>
+          {outreachContext?.breadcrumbHref ? (
+            <a className={styles.navButton} href={outreachContext.breadcrumbHref}>
+              Back to Outreach List
+            </a>
+          ) : null}
         </div>
 
         <div className={styles.card}>
