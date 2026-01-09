@@ -30,6 +30,9 @@ export type OutreachListHousehold = {
   household_id: number | null;
   solo_constituent_id?: number | null;
   household_snapshot: HouseholdSnapshot;
+  completed_count?: number | null;
+  in_progress_count?: number | null;
+  not_started_count?: number | null;
 };
 
 type Props = {
@@ -52,6 +55,19 @@ export function OutreachListHouseholdRow({ listId, household, members }: Props) 
         : members[0]?.constituent_id ? `c:${members[0].constituent_id}`
           : household.household_snapshot?.householdId ? `h:${household.household_snapshot.householdId}` : null);
 
+  const counts = {
+    complete: household.completed_count ?? 0,
+    inProgress: household.in_progress_count ?? 0,
+    notStarted: household.not_started_count ?? 0,
+  };
+  const providedTotal = counts.complete + counts.inProgress + counts.notStarted;
+  const total = providedTotal || members.length;
+  const resolvedCounts = providedTotal
+    ? counts
+    : { complete: 0, inProgress: 0, notStarted: total };
+  const completePercent = total ? (resolvedCounts.complete / total) * 100 : 0;
+  const inProgressPercent = total ? (resolvedCounts.inProgress / total) * 100 : 0;
+
   const handleNavigate = () => {
     if (!householdKey) return;
 
@@ -64,6 +80,19 @@ export function OutreachListHouseholdRow({ listId, household, members }: Props) 
         <div>
           <div className={styles.householdName}>{title}</div>
           <div className={styles.meta}>{members.length} member{members.length === 1 ? '' : 's'}</div>
+          <div className={styles.statusSummary}>
+            <span>Complete {resolvedCounts.complete}</span>
+            <span>In progress {resolvedCounts.inProgress}</span>
+            <span>Not started {resolvedCounts.notStarted}</span>
+          </div>
+          <div
+            className={styles.progressBar}
+            role="img"
+            aria-label={`Household outreach progress: ${resolvedCounts.complete} complete, ${resolvedCounts.inProgress} in progress, ${resolvedCounts.notStarted} not started`}
+          >
+            <div className={styles.progressComplete} style={{ width: `${completePercent}%` }} />
+            <div className={styles.progressInProgress} style={{ width: `${inProgressPercent}%` }} />
+          </div>
         </div>
         <div className={styles.chevron}>→</div>
       </button>

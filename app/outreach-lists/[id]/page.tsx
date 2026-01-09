@@ -19,6 +19,9 @@ type OutreachListHousehold = {
   household_id: number | null;
   solo_constituent_id?: number | null;
   household_snapshot: { displayName?: string };
+  completed_count?: number | null;
+  in_progress_count?: number | null;
+  not_started_count?: number | null;
 };
 
 export const dynamic = 'force-dynamic';
