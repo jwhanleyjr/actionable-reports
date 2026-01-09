@@ -1,7 +1,7 @@
 import Link from 'next/link';
 
-import { getSupabaseAdmin } from '../lib/supabaseAdmin';
-import styles from './home.module.css';
+import { getSupabaseAdmin } from '../../../lib/supabaseAdmin';
+import styles from '../../home.module.css';
 
 type OutreachListCard = {
   id: string;
@@ -18,31 +18,7 @@ type OutreachListCard = {
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
-const actionCards = [
-  {
-    title: 'Upload Excel',
-    description: 'Import a spreadsheet to build an outreach list from existing donor data.',
-    cta: 'Upload file',
-    href: '/outreach-lists/new/import',
-    comingSoon: false,
-  },
-  {
-    title: 'Manual List',
-    description: 'Create a custom list one contact at a time and assign callers.',
-    cta: 'Build list',
-    href: '#',
-    comingSoon: true,
-  },
-  {
-    title: 'Individual Search',
-    description: 'Look up one constituent to review giving history and log activity.',
-    cta: 'Open search',
-    href: '/search',
-    comingSoon: false,
-  },
-];
-
-async function fetchLatestOutreachLists(): Promise<OutreachListCard[]> {
+async function fetchArchivedOutreachLists(): Promise<OutreachListCard[]> {
   if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
     return [];
   }
@@ -50,10 +26,10 @@ async function fetchLatestOutreachLists(): Promise<OutreachListCard[]> {
   const supabase = getSupabaseAdmin();
   const { data: lists } = await supabase
     .from('outreach_lists')
-    .select('id, name, goal, stage, updated_at')
-    .is('archived_at', null)
-    .order('updated_at', { ascending: false })
-    .limit(6);
+    .select('id, name, goal, stage, updated_at, archived_at')
+    .not('archived_at', 'is', null)
+    .order('archived_at', { ascending: false })
+    .limit(24);
 
   if (!lists?.length) {
     return [];
@@ -90,6 +66,7 @@ async function fetchLatestOutreachLists(): Promise<OutreachListCard[]> {
       name: list.name,
       goal: list.goal,
       stage: list.stage,
+      archived_at: list.archived_at,
       households: count ?? 0,
       completed: progress.completed,
       inProgress: progress.inProgress,
@@ -100,60 +77,26 @@ async function fetchLatestOutreachLists(): Promise<OutreachListCard[]> {
   return results;
 }
 
-export default async function Home() {
-  const outreachLists = await fetchLatestOutreachLists();
+export default async function ArchivedOutreachListsPage() {
+  const outreachLists = await fetchArchivedOutreachLists();
 
   return (
     <main className={styles.page}>
       <div className={styles.shell}>
         <header className={styles.hero}>
-          <p className={styles.kicker}>DONOR OUTREACH AND ENGAGEMENT</p>
-          <h1 className={styles.title}>Turn donor data into meaningful action</h1>
+          <p className={styles.kicker}>ARCHIVED OUTREACH LISTS</p>
+          <h1 className={styles.title}>Reference past outreach efforts</h1>
           <p className={styles.subtitle}>
-            Organize contacts into outreach lists, add people manually, or look up an individual to
-            review history and plan next steps that move your mission forward.
+            Archived lists are read-only snapshots of completed outreach work.
           </p>
+          <div className={styles.heroActions}>
+            <Link className={styles.ghostButton} href="/">
+              Back to Dashboard
+            </Link>
+          </div>
         </header>
 
-        <section className={styles.actionsSection}>
-          <div className={styles.actionsGrid}>
-            {actionCards.map((action) => (
-              <div key={action.title} className={styles.actionCard}>
-                <div>
-                  <div className={styles.cardHeaderRow}>
-                    <h3 className={styles.cardTitle}>{action.title}</h3>
-                    {action.comingSoon ? <span className={styles.badge}>Coming soon</span> : null}
-                  </div>
-                  <p className={styles.cardDescription}>{action.description}</p>
-                </div>
-                {action.comingSoon ? (
-                  <button type="button" className={styles.disabledButton} disabled>
-                    {action.cta}
-                  </button>
-                ) : (
-                  <Link className={styles.primaryButton} href={action.href}>
-                    {action.cta}
-                  </Link>
-                )}
-              </div>
-            ))}
-          </div>
-        </section>
-
         <section className={styles.campaignsSection}>
-          <div className={styles.sectionHeader}>
-            <div>
-              <p className={styles.kicker}>Outreach Lists</p>
-              <h2 className={styles.sectionTitle}>Stay aligned with active outreach efforts</h2>
-            </div>
-            <Link className={styles.ghostButton} href="/outreach-lists/new/import">
-              New Outreach List
-            </Link>
-            <Link className={styles.ghostButton} href="/outreach-lists/archived">
-              View archived
-            </Link>
-          </div>
-
           {outreachLists.length ? (
             <div className={styles.campaignGrid}>
               {outreachLists.map((list) => {
@@ -165,10 +108,10 @@ export default async function Home() {
                   <div key={list.id} className={styles.campaignCard}>
                     <div className={styles.cardHeaderRow}>
                       <h3 className={styles.cardTitle}>{list.name}</h3>
-                      <span className={styles.statusBadge}>{list.stage ?? 'Draft'}</span>
+                      <span className={styles.statusBadge}>{list.stage ?? 'Archived'}</span>
                     </div>
                     <p className={styles.cardDescription}>{list.goal ?? 'Goal not set'}</p>
-                    <p className={styles.metaText}>{list.households} households queued</p>
+                    <p className={styles.metaText}>{list.households} households archived</p>
                     <div
                       className={styles.progressBar}
                       role="img"
@@ -185,7 +128,7 @@ export default async function Home() {
               })}
             </div>
           ) : (
-            <div className={styles.emptyState}>No outreach lists yet. Start by uploading an Excel file.</div>
+            <div className={styles.emptyState}>No archived outreach lists yet.</div>
           )}
         </section>
       </div>

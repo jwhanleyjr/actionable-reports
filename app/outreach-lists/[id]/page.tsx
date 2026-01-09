@@ -10,6 +10,7 @@ type OutreachListRecord = {
   name: string;
   goal: string | null;
   stage: string | null;
+  archived_at?: string | null;
   created_at?: string;
   updated_at?: string;
 };
@@ -94,6 +95,7 @@ export default async function OutreachListDetailPage({ params }: { params: { id:
             <div className={styles.pills}>
               {list.goal ? <span className={styles.pill}>{list.goal}</span> : null}
               {list.stage ? <span className={styles.pillMuted}>{list.stage}</span> : null}
+              {list.archived_at ? <span className={styles.pillMuted}>Archived</span> : null}
             </div>
           </div>
           <div className={styles.headerActions}>
@@ -102,6 +104,15 @@ export default async function OutreachListDetailPage({ params }: { params: { id:
             </Link>
             <form action={`/api/outreach-lists/${list.id}/enhance`} method="post">
               <button className={styles.primaryButton} type="submit">Enhance list</button>
+            </form>
+            <form action={`/api/outreach-lists/${list.id}/archive`} method="post">
+              <button
+                className={styles.archiveButton}
+                type="submit"
+                disabled={Boolean(list.archived_at)}
+              >
+                {list.archived_at ? 'Archived' : 'Archive list'}
+              </button>
             </form>
           </div>
         </header>

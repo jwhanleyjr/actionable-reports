@@ -36,6 +36,12 @@
   max-width: 720px;
 }
 
+.heroActions {
+  margin-top: 16px;
+  display: flex;
+  gap: 12px;
+}
+
 .actionsSection {
   margin-bottom: 40px;
 }
