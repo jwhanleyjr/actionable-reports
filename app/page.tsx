@@ -48,20 +48,30 @@ async function fetchLatestOutreachLists(): Promise<OutreachListCard[]> {
   }
 
   const supabase = getSupabaseAdmin();
-  const { data: lists } = await supabase
+  const { data: lists, error } = await supabase
     .from('outreach_lists')
-    .select('id, name, goal, stage, updated_at')
+    .select('id, name, goal, stage, updated_at, archived_at')
     .is('archived_at', null)
     .order('updated_at', { ascending: false })
     .limit(6);
 
-  if (!lists?.length) {
+  let listRows = lists;
+  if (error) {
+    const { data: fallbackLists } = await supabase
+      .from('outreach_lists')
+      .select('id, name, goal, stage, updated_at')
+      .order('updated_at', { ascending: false })
+      .limit(6);
+    listRows = fallbackLists;
+  }
+
+  if (!listRows?.length) {
     return [];
   }
 
   const results: OutreachListCard[] = [];
 
-  for (const list of lists) {
+  for (const list of listRows) {
     const { count } = await supabase
       .from('outreach_list_households')
       .select('id', { count: 'exact', head: true })
