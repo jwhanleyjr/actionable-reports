@@ -22,6 +22,15 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     .is('archived_at', null);
 
   if (error) {
+    if (error.message.includes('archived_at')) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: 'Archiving is not available yet. Apply the latest database migration and try again.',
+        },
+        { status: 409 }
+      );
+    }
     return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
   }
 
