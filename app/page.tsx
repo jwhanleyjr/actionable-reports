@@ -8,10 +8,22 @@ type OutreachListCard = {
   name: string;
   goal: string | null;
   stage: string | null;
+  archived_at?: string | null;
   households: number;
   completed: number;
   inProgress: number;
   notStarted: number;
+};
+
+type OutreachListRow = {
+  id: string;
+  name: string;
+  goal: string | null;
+  stage: string | null;
+};
+
+type OutreachListRowWithArchive = OutreachListRow & {
+  archived_at?: string | null;
 };
 
 export const dynamic = 'force-dynamic';
@@ -19,9 +31,9 @@ export const revalidate = 0;
 
 const actionCards = [
   {
-    title: 'Upload Excel',
-    description: 'Import a spreadsheet to build an outreach list from existing donor data.',
-    cta: 'Upload file',
+    title: 'Upload Bloomerang Report',
+    description: 'Import Bloomerang excel report to build and outreach list from existing donor data.',
+    cta: 'Upload report',
     href: '/outreach-lists/new/import',
     comingSoon: false,
   },
@@ -47,19 +59,30 @@ async function fetchLatestOutreachLists(): Promise<OutreachListCard[]> {
   }
 
   const supabase = getSupabaseAdmin();
-  const { data: lists } = await supabase
+  const { data: lists, error } = await supabase
     .from('outreach_lists')
-    .select('id, name, goal, stage, updated_at')
+    .select('id, name, goal, stage, updated_at, archived_at')
+    .is('archived_at', null)
     .order('updated_at', { ascending: false })
     .limit(6);
 
-  if (!lists?.length) {
+  let listRows: OutreachListRow[] | OutreachListRowWithArchive[] | null = lists;
+  if (error) {
+    const { data: fallbackLists } = await supabase
+      .from('outreach_lists')
+      .select('id, name, goal, stage, updated_at')
+      .order('updated_at', { ascending: false })
+      .limit(6);
+    listRows = fallbackLists;
+  }
+
+  if (!listRows?.length) {
     return [];
   }
 
   const results: OutreachListCard[] = [];
 
-  for (const list of lists) {
+  for (const list of listRows) {
     const { count } = await supabase
       .from('outreach_list_households')
       .select('id', { count: 'exact', head: true })
@@ -146,6 +169,9 @@ export default async function Home() {
             </div>
             <Link className={styles.ghostButton} href="/outreach-lists/new/import">
               New Outreach List
+            </Link>
+            <Link className={styles.ghostButton} href="/outreach-lists/archived">
+              View archived
             </Link>
           </div>
 

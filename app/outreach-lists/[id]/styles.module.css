@@ -82,6 +82,23 @@
   border-color: #94a3b8;
 }
 
+.archiveButton {
+  border: 1px solid #fca5a5;
+  color: #7f1d1d;
+  background: #fef2f2;
+  border-radius: 10px;
+  padding: 12px 18px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.archiveButton:disabled {
+  border-color: #e5e7eb;
+  color: #9ca3af;
+  background: #f9fafb;
+  cursor: not-allowed;
+}
+
 .section {
   background: #fff;
   border: 1px solid #e5e7eb;
