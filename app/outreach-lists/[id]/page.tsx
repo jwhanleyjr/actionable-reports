@@ -82,7 +82,8 @@ export default async function OutreachListDetailPage({
   });
   const needsPhoneByHouseholdId = new Map<string, boolean>();
   groupedMembers.forEach((groupMembers, householdId) => {
-    const needsPhone = groupMembers.some((member) => !member.member_snapshot?.phone);
+    const hasPhone = groupMembers.some((member) => Boolean(member.member_snapshot?.phone));
+    const needsPhone = !hasPhone;
     needsPhoneByHouseholdId.set(householdId, needsPhone);
   });
   const sortedHouseholds = [...(households ?? [])].sort((left, right) => {
