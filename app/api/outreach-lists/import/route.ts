@@ -68,13 +68,19 @@ export async function POST(request: NextRequest) {
 
   if (listError || !listData?.id) {
     console.error('Failed to create outreach list.', listError);
-    const isNetworkError = listError?.message?.includes('fetch failed') || listError?.details?.includes('ENOTFOUND');
+    const listErrorMessage = listError?.message ?? '';
+    const listErrorDetails = listError?.details ?? '';
+    const isNetworkError = listErrorMessage.includes('fetch failed') || listErrorDetails.includes('ENOTFOUND');
+    const isPausedProject =
+      listErrorMessage.toLowerCase().includes('paused') || listErrorDetails.toLowerCase().includes('paused');
     return NextResponse.json(
       {
         ok: false,
         error: isNetworkError
           ? 'Unable to reach Supabase. Check NEXT_PUBLIC_SUPABASE_URL and network/DNS configuration.'
-          : listError?.message || 'Unable to create outreach list.',
+          : isPausedProject
+            ? 'Supabase project is paused. Resume the project in Supabase before importing.'
+            : listError?.message || 'Unable to create outreach list.',
       },
       { status: 500 }
     );
@@ -93,13 +99,19 @@ export async function POST(request: NextRequest) {
 
   if (importError) {
     console.error('Failed to create outreach list import rows.', importError);
-    const isNetworkError = importError?.message?.includes('fetch failed') || importError?.details?.includes('ENOTFOUND');
+    const importErrorMessage = importError?.message ?? '';
+    const importErrorDetails = importError?.details ?? '';
+    const isNetworkError = importErrorMessage.includes('fetch failed') || importErrorDetails.includes('ENOTFOUND');
+    const isPausedProject =
+      importErrorMessage.toLowerCase().includes('paused') || importErrorDetails.toLowerCase().includes('paused');
     return NextResponse.json(
       {
         ok: false,
         error: isNetworkError
           ? 'Unable to reach Supabase. Check NEXT_PUBLIC_SUPABASE_URL and network/DNS configuration.'
-          : importError.message,
+          : isPausedProject
+            ? 'Supabase project is paused. Resume the project in Supabase before importing.'
+            : importError.message,
       },
       { status: 500 }
     );
