@@ -57,16 +57,29 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
   debug.steps.push('start');
 
   const { id } = params;
+  const wantsJson =
+    request.headers.get('accept')?.includes('application/json') ||
+    request.headers.get('content-type')?.includes('application/json');
+  const redirectToList = (query?: string) =>
+    NextResponse.redirect(
+      new URL(`/outreach-lists/${id}${query ? `?${query}` : ''}`, request.nextUrl.origin),
+      303
+    );
+  const respondOk = (payload: Record<string, unknown>) =>
+    wantsJson ? NextResponse.json(payload) : redirectToList('enhanced=1');
+  const respondError = (payload: Record<string, unknown>, status = 500) =>
+    wantsJson ? NextResponse.json(payload, { status }) : redirectToList('enhanceError=1');
 
   try {
     let supabase: SupabaseClient;
     try {
       supabase = getSupabaseAdmin();
     } catch (error) {
-      return NextResponse.json(
-        { ok: false, error: error instanceof Error ? error.message : 'Supabase configuration is missing.', debug },
-        { status: 500 }
-      );
+      return respondError({
+        ok: false,
+        error: error instanceof Error ? error.message : 'Supabase configuration is missing.',
+        debug,
+      });
     }
 
     const body = await request.json().catch(() => ({} as { concurrency?: number }));
@@ -77,10 +90,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     try {
       apiKey = getApiKey();
     } catch (error) {
-      return NextResponse.json(
-        { ok: false, error: error instanceof Error ? error.message : 'Missing API key.', debug },
-        { status: 500 }
-      );
+      return respondError({ ok: false, error: error instanceof Error ? error.message : 'Missing API key.', debug });
     }
 
     debug.steps.push('load-import-rows');
@@ -92,7 +102,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       .order('row_number');
 
     if (importError) {
-      return NextResponse.json({ ok: false, error: importError.message, debug }, { status: 500 });
+      return respondError({ ok: false, error: importError.message, debug });
     }
 
     debug.counts.importRows = importRows?.length ?? 0;
@@ -100,7 +110,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
 
     if (!importRows || importRows.length === 0) {
       debug.steps.push('done');
-      return NextResponse.json({ ok: true, debug, enhancedHouseholds: 0, enhancedMembers: 0, notFound: [], errors: [] });
+      return respondOk({ ok: true, debug, enhancedHouseholds: 0, enhancedMembers: 0, notFound: [], errors: [] });
     }
 
     debug.steps.push('map-account-numbers');
@@ -121,7 +131,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       );
 
     if (mappedError) {
-      return NextResponse.json({ ok: false, error: mappedError.message, debug }, { status: 500 });
+      return respondError({ ok: false, error: mappedError.message, debug });
     }
 
     (mappedAccounts ?? []).forEach((row) => {
@@ -140,7 +150,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       .eq('outreach_list_id', id);
 
     if (deleteMembersError) {
-      return NextResponse.json({ ok: false, error: deleteMembersError.message, debug }, { status: 500 });
+      return respondError({ ok: false, error: deleteMembersError.message, debug });
     }
 
     const { error: deleteHouseholdsError } = await supabase
@@ -149,7 +159,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       .eq('outreach_list_id', id);
 
     if (deleteHouseholdsError) {
-      return NextResponse.json({ ok: false, error: deleteHouseholdsError.message, debug }, { status: 500 });
+      return respondError({ ok: false, error: deleteHouseholdsError.message, debug });
     }
 
     const queue = [...importRows];
@@ -384,7 +394,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
 
     if (!households.size) {
       debug.steps.push('done');
-      return NextResponse.json({ ok: true, ...result, debug });
+      return respondOk({ ok: true, ...result, debug });
     }
 
     const householdRows = Array.from(households.entries()).map(([_, data]) => {
@@ -411,7 +421,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
 
     if (error) {
       result.errors.push(error.message);
-      return NextResponse.json({ ok: false, ...result, debug }, { status: 500 });
+      return respondError({ ok: false, ...result, debug });
     }
 
     (upserts ?? []).forEach((row) => {
@@ -489,17 +499,14 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     result.enhancedMembers = memberRows.length;
     debug.steps.push('done');
 
-    return NextResponse.json({ ok: true, ...result, debug });
+    return respondOk({ ok: true, ...result, debug });
   } catch (err) {
     console.error('Enhance failed', {
       outreachListId: id,
       debug,
       err: { message: (err as Error).message, stack: (err as Error).stack, name: (err as Error).name },
     });
-    return Response.json(
-      { ok: false, error: (err as Error).message, debug },
-      { status: 500 }
-    );
+    return respondError({ ok: false, error: (err as Error).message, debug });
   }
 }
 

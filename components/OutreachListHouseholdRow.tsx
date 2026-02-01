@@ -40,9 +40,10 @@ type Props = {
   listId: string;
   household: OutreachListHousehold;
   members: OutreachListMember[];
+  needsPhone?: boolean;
 };
 
-export function OutreachListHouseholdRow({ listId, household, members }: Props) {
+export function OutreachListHouseholdRow({ listId, household, members, needsPhone }: Props) {
   const router = useRouter();
 
   const title =
@@ -78,7 +79,10 @@ export function OutreachListHouseholdRow({ listId, household, members }: Props) 
           <div className={isComplete ? styles.metaCompleted : styles.meta}>
             {members.length} member{members.length === 1 ? '' : 's'}
           </div>
-          <span className={styles.statusPill}>{statusLabel}</span>
+          <div className={styles.pills}>
+            <span className={styles.statusPill}>{statusLabel}</span>
+            {needsPhone ? <span className={styles.needPhonePill}>Need Phone</span> : null}
+          </div>
         </div>
         <div className={styles.chevron}>→</div>
       </button>
