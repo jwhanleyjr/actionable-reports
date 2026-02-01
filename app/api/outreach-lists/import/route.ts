@@ -28,8 +28,23 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: false, error: 'Stage must be Draft, Active, or Paused.' }, { status: 400 });
   }
 
-  const buffer = Buffer.from(await file.arrayBuffer());
-  const parsedRows = parseAccountNumbersFromWorkbook(buffer);
+  let parsedRows: ReturnType<typeof parseAccountNumbersFromWorkbook>;
+  try {
+    const buffer = Buffer.from(await file.arrayBuffer());
+    parsedRows = parseAccountNumbersFromWorkbook(buffer);
+  } catch (error) {
+    console.error('Failed to parse outreach list workbook.', error);
+    return NextResponse.json(
+      {
+        ok: false,
+        error:
+          error instanceof Error
+            ? `Unable to read the Excel file: ${error.message}`
+            : 'Unable to read the Excel file.',
+      },
+      { status: 400 }
+    );
+  }
 
   if (!parsedRows.length) {
     return NextResponse.json({ ok: false, error: 'No account numbers were found in the uploaded file.' }, { status: 400 });
@@ -52,7 +67,23 @@ export async function POST(request: NextRequest) {
     .single();
 
   if (listError || !listData?.id) {
-    return NextResponse.json({ ok: false, error: listError?.message || 'Unable to create outreach list.' }, { status: 500 });
+    console.error('Failed to create outreach list.', listError);
+    const listErrorMessage = listError?.message ?? '';
+    const listErrorDetails = listError?.details ?? '';
+    const isNetworkError = listErrorMessage.includes('fetch failed') || listErrorDetails.includes('ENOTFOUND');
+    const isPausedProject =
+      listErrorMessage.toLowerCase().includes('paused') || listErrorDetails.toLowerCase().includes('paused');
+    return NextResponse.json(
+      {
+        ok: false,
+        error: isNetworkError
+          ? 'Unable to reach Supabase. Check NEXT_PUBLIC_SUPABASE_URL and network/DNS configuration.'
+          : isPausedProject
+            ? 'Supabase project is paused. Resume the project in Supabase before importing.'
+            : listError?.message || 'Unable to create outreach list.',
+      },
+      { status: 500 }
+    );
   }
 
   const importRows = parsedRows.map((row, index) => ({
@@ -67,7 +98,23 @@ export async function POST(request: NextRequest) {
     .insert(importRows);
 
   if (importError) {
-    return NextResponse.json({ ok: false, error: importError.message }, { status: 500 });
+    console.error('Failed to create outreach list import rows.', importError);
+    const importErrorMessage = importError?.message ?? '';
+    const importErrorDetails = importError?.details ?? '';
+    const isNetworkError = importErrorMessage.includes('fetch failed') || importErrorDetails.includes('ENOTFOUND');
+    const isPausedProject =
+      importErrorMessage.toLowerCase().includes('paused') || importErrorDetails.toLowerCase().includes('paused');
+    return NextResponse.json(
+      {
+        ok: false,
+        error: isNetworkError
+          ? 'Unable to reach Supabase. Check NEXT_PUBLIC_SUPABASE_URL and network/DNS configuration.'
+          : isPausedProject
+            ? 'Supabase project is paused. Resume the project in Supabase before importing.'
+            : importError.message,
+      },
+      { status: 500 }
+    );
   }
 
   return NextResponse.json({
