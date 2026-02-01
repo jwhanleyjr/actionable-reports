@@ -68,7 +68,16 @@ export async function POST(request: NextRequest) {
 
   if (listError || !listData?.id) {
     console.error('Failed to create outreach list.', listError);
-    return NextResponse.json({ ok: false, error: listError?.message || 'Unable to create outreach list.' }, { status: 500 });
+    const isNetworkError = listError?.message?.includes('fetch failed') || listError?.details?.includes('ENOTFOUND');
+    return NextResponse.json(
+      {
+        ok: false,
+        error: isNetworkError
+          ? 'Unable to reach Supabase. Check NEXT_PUBLIC_SUPABASE_URL and network/DNS configuration.'
+          : listError?.message || 'Unable to create outreach list.',
+      },
+      { status: 500 }
+    );
   }
 
   const importRows = parsedRows.map((row, index) => ({
@@ -84,7 +93,16 @@ export async function POST(request: NextRequest) {
 
   if (importError) {
     console.error('Failed to create outreach list import rows.', importError);
-    return NextResponse.json({ ok: false, error: importError.message }, { status: 500 });
+    const isNetworkError = importError?.message?.includes('fetch failed') || importError?.details?.includes('ENOTFOUND');
+    return NextResponse.json(
+      {
+        ok: false,
+        error: isNetworkError
+          ? 'Unable to reach Supabase. Check NEXT_PUBLIC_SUPABASE_URL and network/DNS configuration.'
+          : importError.message,
+      },
+      { status: 500 }
+    );
   }
 
   return NextResponse.json({
