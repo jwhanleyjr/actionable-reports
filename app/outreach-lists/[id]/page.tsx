@@ -80,9 +80,20 @@ export default async function OutreachListDetailPage({
     existing.push(member);
     groupedMembers.set(key, existing);
   });
+  const needsPhoneByHouseholdId = new Map<string, boolean>();
+  groupedMembers.forEach((groupMembers, householdId) => {
+    const needsPhone = groupMembers.some((member) => !member.member_snapshot?.phone);
+    needsPhoneByHouseholdId.set(householdId, needsPhone);
+  });
   const sortedHouseholds = [...(households ?? [])].sort((left, right) => {
     const leftComplete = left.outreach_status === 'complete';
     const rightComplete = right.outreach_status === 'complete';
+    const leftNeedsPhone = needsPhoneByHouseholdId.get(left.id) ?? false;
+    const rightNeedsPhone = needsPhoneByHouseholdId.get(right.id) ?? false;
+
+    if (leftNeedsPhone !== rightNeedsPhone) {
+      return leftNeedsPhone ? 1 : -1;
+    }
 
     if (leftComplete === rightComplete) {
       return 0;
@@ -148,6 +159,7 @@ export default async function OutreachListDetailPage({
                 listId={list.id}
                 household={household}
                 members={groupedMembers.get(household.id) ?? []}
+                needsPhone={needsPhoneByHouseholdId.get(household.id) ?? false}
               />
             ))}
           </div>
