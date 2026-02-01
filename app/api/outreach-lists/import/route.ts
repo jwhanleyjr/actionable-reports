@@ -28,8 +28,23 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: false, error: 'Stage must be Draft, Active, or Paused.' }, { status: 400 });
   }
 
-  const buffer = Buffer.from(await file.arrayBuffer());
-  const parsedRows = parseAccountNumbersFromWorkbook(buffer);
+  let parsedRows: ReturnType<typeof parseAccountNumbersFromWorkbook>;
+  try {
+    const buffer = Buffer.from(await file.arrayBuffer());
+    parsedRows = parseAccountNumbersFromWorkbook(buffer);
+  } catch (error) {
+    console.error('Failed to parse outreach list workbook.', error);
+    return NextResponse.json(
+      {
+        ok: false,
+        error:
+          error instanceof Error
+            ? `Unable to read the Excel file: ${error.message}`
+            : 'Unable to read the Excel file.',
+      },
+      { status: 400 }
+    );
+  }
 
   if (!parsedRows.length) {
     return NextResponse.json({ ok: false, error: 'No account numbers were found in the uploaded file.' }, { status: 400 });
@@ -52,6 +67,7 @@ export async function POST(request: NextRequest) {
     .single();
 
   if (listError || !listData?.id) {
+    console.error('Failed to create outreach list.', listError);
     return NextResponse.json({ ok: false, error: listError?.message || 'Unable to create outreach list.' }, { status: 500 });
   }
 
@@ -67,6 +83,7 @@ export async function POST(request: NextRequest) {
     .insert(importRows);
 
   if (importError) {
+    console.error('Failed to create outreach list import rows.', importError);
     return NextResponse.json({ ok: false, error: importError.message }, { status: 500 });
   }
 
