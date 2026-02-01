@@ -73,9 +73,37 @@ export default async function OutreachListDetailPage({
     notFound();
   }
 
+  const householdIdByKey = new Map<string, string>();
+  const householdIdByHouseholdId = new Map<number, string>();
+  (households ?? []).forEach((household) => {
+    if (household.household_key) {
+      householdIdByKey.set(household.household_key, household.id);
+    }
+    if (household.household_id) {
+      householdIdByHouseholdId.set(household.household_id, household.id);
+    }
+    if (household.household_snapshot?.householdId) {
+      householdIdByHouseholdId.set(household.household_snapshot.householdId, household.id);
+    }
+  });
+
+  const resolveHouseholdId = (member: OutreachListMember) => {
+    if (member.outreach_list_household_id) {
+      return member.outreach_list_household_id;
+    }
+    const snapshotKey = member.member_snapshot?.householdKey;
+    if (snapshotKey && householdIdByKey.has(snapshotKey)) {
+      return householdIdByKey.get(snapshotKey) ?? member.id;
+    }
+    if (member.household_id && householdIdByHouseholdId.has(member.household_id)) {
+      return householdIdByHouseholdId.get(member.household_id) ?? member.id;
+    }
+    return member.id;
+  };
+
   const groupedMembers = new Map<string, OutreachListMember[]>();
   (members ?? []).forEach((member) => {
-    const key = member.outreach_list_household_id || member.member_snapshot?.householdKey || member.id;
+    const key = resolveHouseholdId(member);
     const existing = groupedMembers.get(key) ?? [];
     existing.push(member);
     groupedMembers.set(key, existing);

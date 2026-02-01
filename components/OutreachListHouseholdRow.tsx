@@ -81,7 +81,7 @@ export function OutreachListHouseholdRow({ listId, household, members, needsPhon
           </div>
           <div className={styles.pills}>
             <span className={styles.statusPill}>{statusLabel}</span>
-            {needsPhone ? <span className={styles.needPhonePill}>Need Phone</span> : null}
+            {needsPhone ? <span className={styles.needPhonePill}>Needs Phone</span> : null}
           </div>
         </div>
         <div className={styles.chevron}>→</div>
