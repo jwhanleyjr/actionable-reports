@@ -14,7 +14,7 @@ import { getApiKey } from '../utils';
 const summaryCache = new Map<string, Promise<SummaryResponse>>();
 
 export async function POST(request: NextRequest) {
-  let payload: { memberIds?: unknown };
+  let payload: { memberIds?: unknown; outreachGoal?: unknown; outreachContext?: unknown };
 
   try {
     payload = await request.json();
@@ -28,6 +28,8 @@ export async function POST(request: NextRequest) {
   const memberIds = Array.isArray(payload.memberIds)
     ? Array.from(new Set(payload.memberIds.map((value) => Number(value)).filter((value) => Number.isFinite(value))))
     : [];
+  const outreachGoal = typeof payload.outreachGoal === 'string' ? payload.outreachGoal.trim() : null;
+  const outreachContext = typeof payload.outreachContext === 'string' ? payload.outreachContext.trim() : null;
 
   if (!memberIds.length) {
     return NextResponse.json({
@@ -47,13 +49,16 @@ export async function POST(request: NextRequest) {
     }, { status: 500 });
   }
 
-  const cacheKey = memberIds.join('|');
+  const cacheKey = `${memberIds.join('|')}::${outreachGoal ?? ''}::${outreachContext ?? ''}`;
   if (summaryCache.has(cacheKey)) {
     const cached = await summaryCache.get(cacheKey)!;
     return NextResponse.json(cached, { status: cached.ok ? 200 : cached.status ?? 502 });
   }
 
-  const summaryPromise = buildSummary(memberIds, apiKey);
+  const summaryPromise = buildSummary(memberIds, apiKey, {
+    outreachGoal,
+    outreachContext,
+  });
   summaryCache.set(cacheKey, summaryPromise);
 
   try {
@@ -68,7 +73,11 @@ export async function POST(request: NextRequest) {
   }
 }
 
-async function buildSummary(memberIds: number[], apiKey: string): Promise<SummaryResponse> {
+async function buildSummary(
+  memberIds: number[],
+  apiKey: string,
+  outreachInputs: { outreachGoal: string | null; outreachContext: string | null },
+): Promise<SummaryResponse> {
   const notesResult = await fetchHouseholdNotes(memberIds, apiKey);
   const interactionsResult = await fetchAllInteractions(memberIds, apiKey);
 
@@ -132,6 +141,8 @@ async function buildSummary(memberIds: number[], apiKey: string): Promise<Summar
     interactions: interactionSelection.selected,
     lastMeaningful,
     givingInterests: givingInterestsResult.ok ? givingInterestsResult.givingInterests : [],
+    outreachGoal: outreachInputs.outreachGoal,
+    outreachContext: outreachInputs.outreachContext,
   });
 
   if (!summary.ok) {
@@ -167,6 +178,7 @@ type ActivitySummary = {
   suggestedNextSteps: string[];
   givingInterests: string[];
   recommendedOpeningLine: string;
+  suggestedVoicemailMessage: string;
 };
 
 type SummaryInputs = {
@@ -174,6 +186,8 @@ type SummaryInputs = {
   interactions: HouseholdInteraction[];
   lastMeaningful: HouseholdInteraction | null;
   givingInterests: GivingInterest[];
+  outreachGoal: string | null;
+  outreachContext: string | null;
 };
 
 function findLastMeaningfulInteraction(interactions: HouseholdInteraction[]) {
@@ -252,6 +266,19 @@ function extractInterestSnippet(primary?: string | null, secondary?: string | nu
   return source.length > 160 ? `${source.slice(0, 157)}…` : source;
 }
 
+function extractOutreachPurpose(inputs: SummaryInputs) {
+  const context = inputs.outreachContext?.trim();
+  if (context) {
+    return context.length > 180 ? `${context.slice(0, 177)}…` : context;
+  }
+
+  if (inputs.outreachGoal?.trim()) {
+    return `${inputs.outreachGoal.trim()} outreach`;
+  }
+
+  return null;
+}
+
 function buildRecommendedOpeningLine(inputs: SummaryInputs, provided?: string | null) {
   const topInterest = inputs.givingInterests[0];
   const interestLabel = topInterest ? formatInterestLabel(topInterest) : null;
@@ -289,6 +316,25 @@ function buildRecommendedOpeningLine(inputs: SummaryInputs, provided?: string | 
   }
 
   return 'Looking forward to reconnecting and hearing how you have been involved with us recently.';
+}
+
+function buildSuggestedVoicemailMessage(inputs: SummaryInputs, provided?: string | null) {
+  if (provided && provided.trim()) {
+    return provided.trim();
+  }
+
+  const purpose = extractOutreachPurpose(inputs);
+
+  if (purpose) {
+    return `Hi there, this is a quick voicemail from our team. I wanted to follow up regarding ${purpose}. Please give us a call back when you have a moment.`;
+  }
+
+  if (inputs.givingInterests.length) {
+    const interestLabel = formatInterestLabel(inputs.givingInterests[0]);
+    return `Hi there, this is a quick voicemail from our team. I wanted to share a brief update about ${interestLabel}. Please call us back when you have a moment.`;
+  }
+
+  return 'Hi there, this is a quick voicemail from our team. We would love to connect when you have a moment.';
 }
 
 function humanizeChannel(channel?: string | null) {
@@ -337,18 +383,22 @@ async function summarizeWithOpenAI(inputs: SummaryInputs): Promise<
         suggestedNextSteps: ['Capture a recent interaction before the next call.'],
         givingInterests: interestBullets,
         recommendedOpeningLine: buildRecommendedOpeningLine(inputs, null),
+        suggestedVoicemailMessage: buildSuggestedVoicemailMessage(inputs, null),
       },
     };
   }
 
   const promptLines = [
     'You are assisting a fundraiser preparing for personal donor calls.',
-    'Output JSON with: { "keyPoints": [...], "recentTimeline": [...], "lastMeaningfulInteraction": { "date": "...", "channel": "...", "summary": "..." }, "suggestedNextSteps": [...], "givingInterests": [...], "recommendedOpeningLine": "..." }.',
+    'Output JSON with: { "keyPoints": [...], "recentTimeline": [...], "lastMeaningfulInteraction": { "date": "...", "channel": "...", "summary": "..." }, "suggestedNextSteps": [...], "givingInterests": [...], "recommendedOpeningLine": "...", "suggestedVoicemailMessage": "..." }.',
     'keyPoints: 5-8 concise bullets. recentTimeline: 3-8 bullets, most recent first, and include date + channel when from interactions. suggestedNextSteps: 1-3 actionable bullets for a phone call.',
     'givingInterests: 3-6 concise bullets in plain language that summarize giving patterns from the provided interests (avoid IDs).',
     'recommendedOpeningLine: 1-2 sentences, natural phone-call opener. Reference the most recent meaningful personal interaction (Phone/Text/Email/InPerson) if present and nod to at least one concrete giving interest when possible. Avoid donation asks. If no meaningful interaction exists, ground the opener in the most recent note or their relationship with the organization—still no money ask.',
+    'suggestedVoicemailMessage: 1-3 sentences, concise and warm. Mention the outreach purpose/context if provided, avoid any donation ask, and include a gentle call-back request.',
     'Emphasize interactions for recency and call prep; include dates and channels for timeline bullets when based on interactions.',
     'Keep tone concise, donor-call friendly, and actionable.',
+    ...(inputs.outreachGoal ? [`Outreach goal: ${inputs.outreachGoal}`] : []),
+    ...(inputs.outreachContext ? [`Outreach context: ${inputs.outreachContext}`] : []),
     ...(inputs.givingInterests.length
       ? ['Giving Interests (derived from transactions):', ...inputs.givingInterests.map(formatGivingInterestLine)]
       : []),
@@ -437,6 +487,9 @@ function sanitizeSummary(summary: Partial<ActivitySummary>, inputs: SummaryInput
   const opener = typeof summary.recommendedOpeningLine === 'string'
     ? summary.recommendedOpeningLine
     : null;
+  const voicemail = typeof summary.suggestedVoicemailMessage === 'string'
+    ? summary.suggestedVoicemailMessage
+    : null;
 
   return {
     keyPoints: toStrings(summary.keyPoints),
@@ -445,6 +498,7 @@ function sanitizeSummary(summary: Partial<ActivitySummary>, inputs: SummaryInput
     suggestedNextSteps: toStrings(summary.suggestedNextSteps),
     givingInterests: buildGivingInterestBullets(inputs.givingInterests, toStrings(summary.givingInterests)),
     recommendedOpeningLine: buildRecommendedOpeningLine(inputs, opener),
+    suggestedVoicemailMessage: buildSuggestedVoicemailMessage(inputs, voicemail),
   };
 }
 

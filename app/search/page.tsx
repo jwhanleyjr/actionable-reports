@@ -51,6 +51,7 @@ type ActivitySummary = {
     suggestedNextSteps: string[];
     givingInterests: string[];
     recommendedOpeningLine: string;
+    suggestedVoicemailMessage: string;
   };
   notesMeta?: {
     totalFetched: number;
@@ -257,7 +258,11 @@ export function SearchWorkspace({
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ memberIds }),
+        body: JSON.stringify({
+          memberIds,
+          outreachGoal: outreachContext?.goal ?? null,
+          outreachContext: outreachContext?.description ?? null,
+        }),
       });
 
       const payload = (await response.json()) as ActivitySummary;
@@ -678,6 +683,15 @@ export function SearchWorkspace({
                       <p className={styles.notesSummaryLabel}>Recommended Opening Line</p>
                       <p className={styles.openingLineText}>
                         {activitySummary.summary.recommendedOpeningLine}
+                      </p>
+                    </div>
+                  )}
+
+                  {activitySummary.summary.suggestedVoicemailMessage && (
+                    <div className={styles.openingLine}>
+                      <p className={styles.notesSummaryLabel}>Suggested Voicemail</p>
+                      <p className={styles.openingLineText}>
+                        {activitySummary.summary.suggestedVoicemailMessage}
                       </p>
                     </div>
                   )}
