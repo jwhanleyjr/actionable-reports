@@ -186,7 +186,7 @@ export default async function Home() {
                   <div key={list.id} className={styles.campaignCard}>
                     <div className={styles.cardHeaderRow}>
                       <h3 className={styles.cardTitle}>{list.name}</h3>
-                      <span className={styles.statusBadge}>{list.stage ?? 'Draft'}</span>
+                      <span className={styles.statusBadge}>{list.stage ?? 'Not Started'}</span>
                     </div>
                     <p className={styles.cardDescription}>{list.goal ?? 'Goal not set'}</p>
                     <p className={styles.metaText}>{list.households} households queued</p>

@@ -5,7 +5,7 @@ import { getSupabaseAdmin } from '../../../../lib/supabaseAdmin';
 import { parseAccountNumbersFromWorkbook } from '../../../../lib/xlsxImport';
 
 const VALID_GOALS = ['Thank', 'Ask', 'Report'];
-const VALID_STAGES = ['Draft', 'Active', 'Paused'];
+const VALID_STAGES = ['Not Started', 'In Process', 'Complete'];
 
 export const runtime = 'nodejs';
 
@@ -25,7 +25,10 @@ export async function POST(request: NextRequest) {
   }
 
   if (!VALID_STAGES.includes(stage || '')) {
-    return NextResponse.json({ ok: false, error: 'Stage must be Draft, Active, or Paused.' }, { status: 400 });
+    return NextResponse.json(
+      { ok: false, error: 'Stage must be Not Started, In Process, or Complete.' },
+      { status: 400 }
+    );
   }
 
   let parsedRows: ReturnType<typeof parseAccountNumbersFromWorkbook>;

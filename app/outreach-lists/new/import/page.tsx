@@ -6,13 +6,13 @@ import { useRouter } from 'next/navigation';
 import styles from './styles.module.css';
 
 const GOALS = ['Thank', 'Ask', 'Report'];
-const STAGES = ['Draft', 'Active', 'Paused'];
+const STAGES = ['Not Started', 'In Process', 'Complete'];
 
 export default function OutreachListImportPage() {
   const router = useRouter();
   const [name, setName] = useState('New Outreach List');
   const [goal, setGoal] = useState('Thank');
-  const [stage, setStage] = useState('Draft');
+  const [stage, setStage] = useState('Not Started');
   const [file, setFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
