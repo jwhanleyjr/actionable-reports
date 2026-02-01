@@ -30,7 +30,13 @@ type OutreachListHousehold = {
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
-export default async function OutreachListDetailPage({ params }: { params: { id: string } }) {
+export default async function OutreachListDetailPage({
+  params,
+  searchParams,
+}: {
+  params: { id: string };
+  searchParams?: { enhanced?: string; enhanceError?: string };
+}) {
   if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
     return (
       <main className={styles.page}>
@@ -74,9 +80,20 @@ export default async function OutreachListDetailPage({ params }: { params: { id:
     existing.push(member);
     groupedMembers.set(key, existing);
   });
+  const needsPhoneByHouseholdId = new Map<string, boolean>();
+  groupedMembers.forEach((groupMembers, householdId) => {
+    const needsPhone = groupMembers.some((member) => !member.member_snapshot?.phone);
+    needsPhoneByHouseholdId.set(householdId, needsPhone);
+  });
   const sortedHouseholds = [...(households ?? [])].sort((left, right) => {
     const leftComplete = left.outreach_status === 'complete';
     const rightComplete = right.outreach_status === 'complete';
+    const leftNeedsPhone = needsPhoneByHouseholdId.get(left.id) ?? false;
+    const rightNeedsPhone = needsPhoneByHouseholdId.get(right.id) ?? false;
+
+    if (leftNeedsPhone !== rightNeedsPhone) {
+      return leftNeedsPhone ? 1 : -1;
+    }
 
     if (leftComplete === rightComplete) {
       return 0;
@@ -84,6 +101,8 @@ export default async function OutreachListDetailPage({ params }: { params: { id:
 
     return leftComplete ? 1 : -1;
   });
+  const enhanceError = searchParams?.enhanceError === '1';
+  const enhanced = searchParams?.enhanced === '1' && !enhanceError;
 
   return (
     <main className={styles.page}>
@@ -116,6 +135,14 @@ export default async function OutreachListDetailPage({ params }: { params: { id:
             </form>
           </div>
         </header>
+        {enhanceError ? (
+          <div className={`${styles.notice} ${styles.noticeError}`}>
+            We could not enhance this list. Check the server logs for details and try again.
+          </div>
+        ) : null}
+        {enhanced ? (
+          <div className={`${styles.notice} ${styles.noticeSuccess}`}>List enhancement complete.</div>
+        ) : null}
 
         <section className={styles.section}>
           <div className={styles.sectionHeader}>
@@ -132,6 +159,7 @@ export default async function OutreachListDetailPage({ params }: { params: { id:
                 listId={list.id}
                 household={household}
                 members={groupedMembers.get(household.id) ?? []}
+                needsPhone={needsPhoneByHouseholdId.get(household.id) ?? false}
               />
             ))}
           </div>
