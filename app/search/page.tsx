@@ -550,18 +550,22 @@ export function SearchWorkspace({
             <a className={styles.navButton} href={outreachContext.breadcrumbHref}>
               Back to Outreach List
             </a>
+          ) : mode === 'search' ? (
+            <a className={styles.navButton} href="/">
+              Back to Dashboard
+            </a>
           ) : null}
         </div>
 
         <div className={styles.card}>
           <header className={styles.header}>
             <h1 className={styles.title}>
-              {mode === 'householdFocus' ? 'Household Focus' : 'Bloomerang Search Tester'}
+              {mode === 'householdFocus' ? 'Household Focus' : 'Constituent Search'}
             </h1>
             <p className={styles.subtitle}>
               {mode === 'householdFocus'
                 ? 'Review the outreach household profile with giving stats and recent activity.'
-                : 'Enter an account number to query Bloomerang and review the household profile with giving stats.'}
+                : 'Search by name or email to review a household profile with giving stats.'}
             </p>
           </header>
 
@@ -569,7 +573,7 @@ export function SearchWorkspace({
             <form className={styles.form} onSubmit={handleSubmit}>
               <div className={styles.field}>
                 <label className={styles.label} htmlFor="accountNumber">
-                  Account Number
+                  Name or Email
                 </label>
                 <input
                   id="accountNumber"
@@ -578,7 +582,7 @@ export function SearchWorkspace({
                   autoComplete="off"
                   value={accountNumber}
                   onChange={(event) => setAccountNumber(event.target.value)}
-                  placeholder="2872456"
+                  placeholder="Elesha Jones"
                   className={styles.input}
                 />
               </div>
