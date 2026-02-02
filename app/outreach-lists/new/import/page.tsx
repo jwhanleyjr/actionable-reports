@@ -6,13 +6,14 @@ import { useRouter } from 'next/navigation';
 import styles from './styles.module.css';
 
 const GOALS = ['Thank', 'Ask', 'Report'];
-const STAGES = ['Draft', 'Active', 'Paused'];
+const STAGES = ['Not Started', 'In Process', 'Complete'];
 
 export default function OutreachListImportPage() {
   const router = useRouter();
   const [name, setName] = useState('New Outreach List');
   const [goal, setGoal] = useState('Thank');
-  const [stage, setStage] = useState('Draft');
+  const [stage, setStage] = useState('Not Started');
+  const [description, setDescription] = useState('');
   const [file, setFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -30,6 +31,7 @@ export default function OutreachListImportPage() {
     form.append('name', name);
     form.append('goal', goal);
     form.append('stage', stage);
+    form.append('description', description);
     form.append('file', file);
 
     setLoading(true);
@@ -97,6 +99,19 @@ export default function OutreachListImportPage() {
                 </option>
               ))}
             </select>
+          </label>
+
+          <label className={styles.label}>
+            Call Context (optional)
+            <div className={styles.helper}>
+              Share background on why this outreach list exists so AI summaries can tailor suggested language.
+            </div>
+            <textarea
+              className={styles.textarea}
+              value={description}
+              onChange={(event) => setDescription(event.target.value)}
+              placeholder="Example: I am calling people that received an email giving statement but haven’t opened it yet..."
+            />
           </label>
 
           <label className={styles.label}>
